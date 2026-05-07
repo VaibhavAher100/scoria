@@ -5,6 +5,17 @@ All notable changes to Termy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.5] - 2026-05-07
+
+### Added
+- Added developer scrollback reproduction scripts for comparing synchronized redraw behavior across terminals and validating Termy's compatibility layer.
+
+### Changed
+- Split generic AI TUI synchronized-output compatibility helpers out of the Claude Code support module so terminal protocol boundaries are clearer.
+
+### Fixed
+- Preserved terminal scrollback more reliably for AI TUIs that redraw on the normal buffer in xterm.js hosts, including synchronized-output redraw flows that previously purged history in Termy.
+
 ## [1.3.4] - 2026-04-27
 
 ### Added
