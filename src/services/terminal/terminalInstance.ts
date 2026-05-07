@@ -14,8 +14,10 @@ import type { PtyConfig, ShellEvent, ShellEventSource } from '@/services/server/
 import { EnhancedKeyboardProtocol, formatPastedTerminalText } from './enhancedKeyboardProtocol';
 import {
   buildClaudeCodeTuiEnv,
+  createSynchronizedOutputCompatibilityState,
   decodeOsc52Clipboard,
   decodeTmuxPassthroughOsc52Clipboard,
+  filterSynchronizedOutputScrollbackPurge,
   type ClaudeCodeExtendedKeyboardMode,
   XTVERSION_RESPONSE,
 } from './claudeCodeTuiSupport';
@@ -199,6 +201,7 @@ export class TerminalInstance {
   private sessionRecoveryNeeded = false;
   private sessionRecoveryInProgress = false;
   private pendingControlSequenceText = '';
+  private synchronizedOutputCompatibilityState = createSynchronizedOutputCompatibilityState();
   private parserDisposables: IDisposable[] = [];
 
   constructor(options: TerminalOptions = {}) {
@@ -229,6 +232,7 @@ export class TerminalInstance {
         rightClickSelectsWord: true,
         macOptionClickForcesSelection: true,
         rescaleOverlappingGlyphs: true,
+        scrollOnEraseInDisplay: true,
         allowProposedApi: true,
       });
 
@@ -401,10 +405,14 @@ export class TerminalInstance {
     
     // Handle output data (session-level)
     this.outputUnsubscribe = this.ptyClient.onSessionOutput(this.sessionId, (data: Uint8Array) => {
-      const text = new TextDecoder().decode(data);
-      this.extractCwdFromOutput(text);
-      this.updateWin32InputMode(text);
-      this.xterm.write(data);
+      const rawText = new TextDecoder().decode(data);
+      const filteredText = filterSynchronizedOutputScrollbackPurge(
+        rawText,
+        this.synchronizedOutputCompatibilityState,
+      );
+      this.extractCwdFromOutput(filteredText);
+      this.updateWin32InputMode(filteredText);
+      this.xterm.write(filteredText);
     });
     
     // Handle exit events (session-level)
@@ -461,6 +469,7 @@ export class TerminalInstance {
     this.modifyOtherKeysEnabled = false;
     this.claudeCodeTuiSignalObserved = false;
     this.pendingControlSequenceText = '';
+    this.synchronizedOutputCompatibilityState = createSynchronizedOutputCompatibilityState();
   }
 
   private disposePtyClientHandlers(): void {
