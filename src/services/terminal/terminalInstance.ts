@@ -13,11 +13,13 @@ import type { PtyClient } from '@/services/server/ptyClient';
 import type { PtyConfig, ShellEvent, ShellEventSource } from '@/services/server/types';
 import { EnhancedKeyboardProtocol, formatPastedTerminalText } from './enhancedKeyboardProtocol';
 import {
-  buildClaudeCodeTuiEnv,
   createSynchronizedOutputCompatibilityState,
+  filterSynchronizedOutputScrollbackPurge,
+} from './aiTuiCompatibility';
+import {
+  buildClaudeCodeTuiEnv,
   decodeOsc52Clipboard,
   decodeTmuxPassthroughOsc52Clipboard,
-  filterSynchronizedOutputScrollbackPurge,
   type ClaudeCodeExtendedKeyboardMode,
   XTVERSION_RESPONSE,
 } from './claudeCodeTuiSupport';
