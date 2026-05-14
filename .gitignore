@@ -45,5 +45,5 @@ coverage/
 
 # oh-my-codex
 .omx/
-
+.kiro/
 docs/

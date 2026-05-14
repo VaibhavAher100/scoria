@@ -5,6 +5,12 @@ All notable changes to Termy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.6] - 2026-05-14
+
+### Fixed
+- Fixed newline insertion (Shift+Enter, Ctrl+Enter, Alt+Enter) not working in Codex CLI sessions running under WSL2. The modifier+Enter combinations now bypass win32-input-mode encoding and send a real newline through the bracketed paste path so TUI programs correctly interpret it as a multiline edit.
+- Fixed inability to insert consecutive newlines by holding Shift and pressing Enter repeatedly. The win32 shortcut suppression flag is no longer set for newline operations, allowing key-repeat to work as expected.
+
 ## [1.3.5] - 2026-05-07
 
 ### Added

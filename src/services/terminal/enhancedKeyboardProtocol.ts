@@ -34,7 +34,8 @@ export type KeyboardDecision =
   | { type: 'paste-from-clipboard' }
   | { type: 'block-default' }
   | { type: 'send-input'; data: string }
-  | { type: 'write-text'; text: string };
+  | { type: 'write-text'; text: string }
+  | { type: 'paste-newline' };
 
 export { WIN32_SHIFT_ENTER_SEQUENCE } from './win32InputModeEncoder.ts';
 
@@ -91,6 +92,14 @@ export function evaluateKeyboardDecision(
       return { type: 'paste-from-clipboard' };
     }
 
+    // Intercept modifier+Enter before win32-input-mode encoding so that
+    // programs running inside WSL (e.g. Codex CLI) receive a real newline
+    // instead of a win32 KEY_EVENT_RECORD that conpty maps back to plain CR.
+    if (event.type === 'keydown' && event.key === 'Enter' && !event.metaKey
+      && (event.shiftKey || event.ctrlKey || event.altKey)) {
+      return { type: 'paste-newline' };
+    }
+
     const encoded = encodeWin32InputModeKeyEvent(event);
     if (encoded) {
       return { type: 'send-input', data: encoded };
@@ -123,10 +132,11 @@ export function evaluateKeyboardDecision(
     return { type: 'send-input', data: extendedKey };
   }
 
-  if (event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey && event.key === 'Enter') {
-    // Use the text insertion path so shells with bracketed paste support
-    // treat Shift+Enter as a multiline edit instead of a raw Enter keypress.
-    return { type: 'write-text', text: '\n' };
+  if (event.key === 'Enter' && !event.metaKey && (event.shiftKey || event.ctrlKey || event.altKey)) {
+    // Shift+Enter, Ctrl+Enter, and Alt+Enter all insert a newline.
+    // Use the paste path so that shells with bracketed paste mode (e.g. Codex CLI
+    // in WSL) treat the newline as a multiline edit rather than a submit action.
+    return { type: 'paste-newline' };
   }
 
   return { type: 'allow-default' };
@@ -207,6 +217,16 @@ export class EnhancedKeyboardProtocol {
         event.preventDefault?.();
         this.handlers.flushPendingInput();
         this.handlers.insertText(decision.text);
+        return false;
+      case 'paste-newline':
+        // NOTE: Do NOT set suppressWin32ShortcutEvents here.
+        // Unlike copy/paste, newline insertion has no follow-up keyup side effects.
+        // Setting the flag would prevent repeat Shift+Enter (holding Shift and
+        // pressing Enter multiple times) because the suppression only resets on a
+        // bare keyup with no modifiers held.
+        event.preventDefault?.();
+        this.handlers.flushPendingInput();
+        this.handlers.pasteText('\n');
         return false;
     }
   }

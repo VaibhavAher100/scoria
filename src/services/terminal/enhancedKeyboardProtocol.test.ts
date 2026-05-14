@@ -6,7 +6,6 @@ import {
   EnhancedKeyboardProtocol,
   evaluateKeyboardDecision,
   formatPastedTerminalText,
-  WIN32_SHIFT_ENTER_SEQUENCE,
   type EnhancedKeyboardProtocolHandlers,
   type KeyboardEventLike,
 } from './enhancedKeyboardProtocol.ts';
@@ -148,10 +147,22 @@ test('evaluateKeyboardDecision keeps Ctrl+C without selection on the xterm defau
   assert.deepEqual(decision, { type: 'allow-default' });
 });
 
-test('evaluateKeyboardDecision routes Shift+Enter through text insertion', () => {
+test('evaluateKeyboardDecision routes Shift+Enter through paste-newline path', () => {
   const event = createKeyboardEvent('Enter', { shiftKey: true });
   const decision = evaluateKeyboardDecision(event, { hasSelection: false });
-  assert.deepEqual(decision, { type: 'write-text', text: '\n' });
+  assert.deepEqual(decision, { type: 'paste-newline' });
+});
+
+test('evaluateKeyboardDecision routes Ctrl+Enter through paste-newline path', () => {
+  const event = createKeyboardEvent('Enter', { ctrlKey: true });
+  const decision = evaluateKeyboardDecision(event, { hasSelection: false });
+  assert.deepEqual(decision, { type: 'paste-newline' });
+});
+
+test('evaluateKeyboardDecision routes Alt+Enter through paste-newline path', () => {
+  const event = createKeyboardEvent('Enter', { altKey: true });
+  const decision = evaluateKeyboardDecision(event, { hasSelection: false });
+  assert.deepEqual(decision, { type: 'paste-newline' });
 });
 
 test('evaluateKeyboardDecision routes Ctrl+Shift+letter through modifyOtherKeys when enabled', () => {
@@ -163,13 +174,13 @@ test('evaluateKeyboardDecision routes Ctrl+Shift+letter through modifyOtherKeys 
   assert.deepEqual(decision, { type: 'send-input', data: '\x1b[27;6;67~' });
 });
 
-test('evaluateKeyboardDecision maps Shift+Enter to win32-input-mode when requested', () => {
+test('evaluateKeyboardDecision maps Shift+Enter to paste-newline even in win32-input-mode', () => {
   const event = createKeyboardEvent('Enter', { shiftKey: true });
   const decision = evaluateKeyboardDecision(event, {
     hasSelection: false,
     shiftEnterMode: 'win32-input-mode',
   });
-  assert.deepEqual(decision, { type: 'send-input', data: WIN32_SHIFT_ENTER_SEQUENCE });
+  assert.deepEqual(decision, { type: 'paste-newline' });
 });
 
 test('handleKeyboardEvent copies the current selection and blocks xterm default handling', async () => {
@@ -199,7 +210,7 @@ test('handleKeyboardEvent pastes clipboard text through the terminal write path'
   assert.deepEqual(harness.operations, ['flush', 'paste:clipboard text']);
 });
 
-test('handleKeyboardEvent inserts a newline for Shift+Enter without queueing raw input', () => {
+test('handleKeyboardEvent pastes a newline for Shift+Enter using the bracketed paste path', () => {
   const harness = createProtocolHarness();
   const event = createKeyboardEvent('Enter', { shiftKey: true });
 
@@ -207,13 +218,41 @@ test('handleKeyboardEvent inserts a newline for Shift+Enter without queueing raw
 
   assert.equal(allowed, false);
   assert.equal(event.prevented, true);
-  assert.deepEqual(harness.insertedTexts, ['\n']);
+  assert.deepEqual(harness.pastedTexts, ['\n']);
+  assert.deepEqual(harness.insertedTexts, []);
   assert.deepEqual(harness.queuedInput, []);
-  assert.deepEqual(harness.pastedTexts, []);
-  assert.deepEqual(harness.operations, ['flush', 'insert:\n']);
+  assert.deepEqual(harness.operations, ['flush', 'paste:\n']);
 });
 
-test('handleKeyboardEvent queues the win32-input-mode Shift+Enter sequence when configured', () => {
+test('handleKeyboardEvent pastes a newline for Ctrl+Enter using the bracketed paste path', () => {
+  const harness = createProtocolHarness();
+  const event = createKeyboardEvent('Enter', { ctrlKey: true });
+
+  const allowed = harness.protocol.handleKeyboardEvent(event);
+
+  assert.equal(allowed, false);
+  assert.equal(event.prevented, true);
+  assert.deepEqual(harness.pastedTexts, ['\n']);
+  assert.deepEqual(harness.insertedTexts, []);
+  assert.deepEqual(harness.queuedInput, []);
+  assert.deepEqual(harness.operations, ['flush', 'paste:\n']);
+});
+
+test('handleKeyboardEvent pastes a newline for Alt+Enter using the bracketed paste path', () => {
+  const harness = createProtocolHarness();
+  const event = createKeyboardEvent('Enter', { altKey: true });
+
+  const allowed = harness.protocol.handleKeyboardEvent(event);
+
+  assert.equal(allowed, false);
+  assert.equal(event.prevented, true);
+  assert.deepEqual(harness.pastedTexts, ['\n']);
+  assert.deepEqual(harness.insertedTexts, []);
+  assert.deepEqual(harness.queuedInput, []);
+  assert.deepEqual(harness.operations, ['flush', 'paste:\n']);
+});
+
+test('handleKeyboardEvent pastes a newline for Shift+Enter even in win32-input-mode', () => {
   const { harness, protocol } = createWin32ProtocolHarness();
   const event = createKeyboardEvent('Enter', { shiftKey: true });
 
@@ -221,10 +260,10 @@ test('handleKeyboardEvent queues the win32-input-mode Shift+Enter sequence when 
 
   assert.equal(allowed, false);
   assert.equal(event.prevented, true);
-  assert.deepEqual(harness.queuedInput, [WIN32_SHIFT_ENTER_SEQUENCE]);
+  assert.deepEqual(harness.pastedTexts, ['\n']);
   assert.deepEqual(harness.insertedTexts, []);
-  assert.deepEqual(harness.pastedTexts, []);
-  assert.deepEqual(harness.operations, ['queue:\x1b[13;28;13;1;16;1_']);
+  assert.deepEqual(harness.queuedInput, []);
+  assert.deepEqual(harness.operations, ['flush', 'paste:\n']);
 });
 
 test('handleKeyboardEvent queues win32-input-mode keyup events when configured', () => {
