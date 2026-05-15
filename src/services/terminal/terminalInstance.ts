@@ -24,6 +24,7 @@ import {
   XTVERSION_RESPONSE,
 } from './claudeCodeTuiSupport';
 import { ClaudeCodeSessionState } from './claudeCodeSessionState';
+import { TerminalTitleState } from './terminalTitleState';
 import { shell } from 'electron';
 
 // xterm.js CSS (static import handled by esbuild)
@@ -155,7 +156,7 @@ export class TerminalInstance {
   
   private containerEl: HTMLElement | null = null;
   private options: TerminalOptions;
-  private title: string;
+  private titleState: TerminalTitleState;
   private isInitialized = false;
   private isDestroyed = false;
   private titleChangeCallback: ((title: string) => void) | null = null;
@@ -210,7 +211,7 @@ export class TerminalInstance {
     this.id = `terminal-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     this.options = options;
     this.shellType = options.shellType || 'default';
-    this.title = t('terminal.defaultTitle');
+    this.titleState = new TerminalTitleState(t('terminal.defaultTitle'));
     this.currentFontSize = options.fontSize ?? 14;
   }
 
@@ -543,7 +544,7 @@ export class TerminalInstance {
           return false;
         }
 
-        this.claudeCodeSessionState.observeXtversionQuery();
+        this.observeClaudeCodeXtversionQuery();
         this.write(XTVERSION_RESPONSE);
         return true;
       }),
@@ -555,7 +556,7 @@ export class TerminalInstance {
           return false;
         }
 
-        this.claudeCodeSessionState.observeModifyOtherKeysMode(params[1] === 2);
+        this.observeClaudeCodeModifyOtherKeysMode(params[1] === 2);
         return true;
       }),
       this.xterm.parser.registerDcsHandler({ final: 't' }, (data) => {
@@ -572,6 +573,31 @@ export class TerminalInstance {
 
   private getClaudeCodeExtendedKeyboardMode(): ClaudeCodeExtendedKeyboardMode {
     return this.claudeCodeSessionState.getExtendedKeyboardMode();
+  }
+
+  private observeClaudeCodeXtversionQuery(): void {
+    this.claudeCodeSessionState.observeXtversionQuery();
+    this.applyTitleChange(this.titleState.setAutomaticTitle('Claude Code'));
+  }
+
+  private observeClaudeCodeModifyOtherKeysMode(enabled: boolean): void {
+    this.claudeCodeSessionState.observeModifyOtherKeysMode(enabled);
+    this.applyTitleChange(
+      enabled
+        ? this.titleState.setAutomaticTitle('Claude Code')
+        : this.titleState.clearAutomaticTitle()
+    );
+  }
+
+  private observeShellPrompt(): void {
+    this.claudeCodeSessionState.observeShellPrompt();
+    this.applyTitleChange(this.titleState.clearAutomaticTitle());
+  }
+
+  private applyTitleChange(changed: boolean): void {
+    if (changed) {
+      this.titleChangeCallback?.(this.titleState.getTitle());
+    }
   }
 
   private isXtversionQuery(params: (number | number[])[]): boolean {
@@ -1397,7 +1423,7 @@ export class TerminalInstance {
 
   private handleShellEvent(event: ShellEvent): void {
     if (event.type === 'prompt_start') {
-      this.claudeCodeSessionState.observeShellPrompt();
+      this.observeShellPrompt();
       this.promptMarkers.push(this.xterm.registerMarker(0));
     }
 
@@ -1562,7 +1588,7 @@ export class TerminalInstance {
     return !this.isDestroyed && this.ptyClient !== null && this.ptyClient.isConnected();
   }
 
-  getTitle(): string { return this.title; }
+  getTitle(): string { return this.titleState.getTitle(); }
 
   isClaudeCodeSession(): boolean {
     return this.claudeCodeSessionState.isActive();
@@ -1573,8 +1599,7 @@ export class TerminalInstance {
   }
 
   setTitle(title: string): void {
-    this.title = title;
-    this.titleChangeCallback?.(title);
+    this.applyTitleChange(this.titleState.setCustomTitle(title));
   }
 
 
