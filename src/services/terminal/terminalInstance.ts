@@ -880,9 +880,9 @@ export class TerminalInstance {
     listener: (event: HTMLElementEventMap[K]) => void,
     options?: AddEventListenerOptions,
   ): void {
-    container.addEventListener(type, listener as EventListener, options);
+    container.addEventListener(type, listener, options);
     this.domEventCleanups.push(() => {
-      container.removeEventListener(type, listener as EventListener, options);
+      container.removeEventListener(type, listener, options);
     });
   }
 

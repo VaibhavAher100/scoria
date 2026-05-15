@@ -67,7 +67,7 @@ export class TerminalService {
     settings: TerminalSettings,
     serverManager: ServerManager,
     getTerminalEnvironment: () => Record<string, string> = () => ({}),
-    saveSettings: () => Promise<void> = async () => undefined,
+    saveSettings: () => Promise<void> = () => Promise.resolve(),
   ) {
     this.app = app;
     this.settings = settings;
