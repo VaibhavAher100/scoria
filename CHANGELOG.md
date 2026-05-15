@@ -5,6 +5,22 @@ All notable changes to Termy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.7] - 2026-05-16
+
+### Added
+- Added a terminal context menu action for switching the default shell directly from an open terminal.
+
+### Changed
+- Refreshed the README version badges and positioning copy for the current Termy feature set.
+
+### Fixed
+- Fixed always-on-top terminal windows so the pinned terminal stays scoped to that terminal, new terminals open through the normal layout rules, and the pinned session can be restored to the main window without restarting.
+- Fixed always-on-top terminal tab and context-menu indicators, including visible lock icons in the terminal right-click menu.
+- Fixed Claude Code terminal title restoration and reset stale Claude Code drag-reference state between sessions.
+- Fixed terminal context-menu placement so menus stay inside the visible viewport.
+- Fixed missing terminal notice translations and corrected the Windows `cmd` shell label to `CMD`.
+- Fixed preset workflow action pinning and reduced install-time reconnect churn during development reloads.
+
 ## [1.3.6] - 2026-05-14
 
 ### Fixed
@@ -212,6 +228,9 @@ If you're upgrading from version 1.1.1 or earlier:
 
 ---
 
+[1.3.7]: https://github.com/ZyphrZero/Termy/releases/tag/1.3.7
+[1.3.6]: https://github.com/ZyphrZero/Termy/releases/tag/1.3.6
+[1.3.5]: https://github.com/ZyphrZero/Termy/releases/tag/1.3.5
 [1.3.4]: https://github.com/ZyphrZero/Termy/releases/tag/1.3.4
 [1.3.3]: https://github.com/ZyphrZero/Termy/releases/tag/1.3.3
 [1.3.2]: https://github.com/ZyphrZero/Termy/releases/tag/1.3.2
