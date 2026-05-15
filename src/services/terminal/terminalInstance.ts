@@ -23,6 +23,7 @@ import {
   type ClaudeCodeExtendedKeyboardMode,
   XTVERSION_RESPONSE,
 } from './claudeCodeTuiSupport';
+import { ClaudeCodeSessionState } from './claudeCodeSessionState';
 import { shell } from 'electron';
 
 // xterm.js CSS (static import handled by esbuild)
@@ -197,8 +198,7 @@ export class TerminalInstance {
   private promptMarkers: IMarker[] = [];
   private commandMarkers: TerminalCommandMarker[] = [];
   private win32InputModeEnabled = false;
-  private modifyOtherKeysEnabled = false;
-  private claudeCodeTuiSignalObserved = false;
+  private claudeCodeSessionState = new ClaudeCodeSessionState();
   private webSocketDisconnected = false;
   private sessionRecoveryNeeded = false;
   private sessionRecoveryInProgress = false;
@@ -468,8 +468,7 @@ export class TerminalInstance {
 
   private resetSessionProtocolState(): void {
     this.win32InputModeEnabled = false;
-    this.modifyOtherKeysEnabled = false;
-    this.claudeCodeTuiSignalObserved = false;
+    this.claudeCodeSessionState.reset();
     this.pendingControlSequenceText = '';
     this.synchronizedOutputCompatibilityState = createSynchronizedOutputCompatibilityState();
   }
@@ -544,7 +543,7 @@ export class TerminalInstance {
           return false;
         }
 
-        this.claudeCodeTuiSignalObserved = true;
+        this.claudeCodeSessionState.observeXtversionQuery();
         this.write(XTVERSION_RESPONSE);
         return true;
       }),
@@ -556,8 +555,7 @@ export class TerminalInstance {
           return false;
         }
 
-        this.claudeCodeTuiSignalObserved = true;
-        this.modifyOtherKeysEnabled = params[1] === 2;
+        this.claudeCodeSessionState.observeModifyOtherKeysMode(params[1] === 2);
         return true;
       }),
       this.xterm.parser.registerDcsHandler({ final: 't' }, (data) => {
@@ -573,7 +571,7 @@ export class TerminalInstance {
   }
 
   private getClaudeCodeExtendedKeyboardMode(): ClaudeCodeExtendedKeyboardMode {
-    return this.modifyOtherKeysEnabled ? 'modifyOtherKeys' : 'none';
+    return this.claudeCodeSessionState.getExtendedKeyboardMode();
   }
 
   private isXtversionQuery(params: (number | number[])[]): boolean {
@@ -1399,6 +1397,7 @@ export class TerminalInstance {
 
   private handleShellEvent(event: ShellEvent): void {
     if (event.type === 'prompt_start') {
+      this.claudeCodeSessionState.observeShellPrompt();
       this.promptMarkers.push(this.xterm.registerMarker(0));
     }
 
@@ -1566,10 +1565,7 @@ export class TerminalInstance {
   getTitle(): string { return this.title; }
 
   isClaudeCodeSession(): boolean {
-    const normalizedTitle = this.title.trim().toLowerCase().replace(/\s+/g, ' ');
-    return this.claudeCodeTuiSignalObserved
-      || normalizedTitle === 'claude'
-      || normalizedTitle === 'claude code';
+    return this.claudeCodeSessionState.isActive();
   }
 
   getOptions(): Readonly<TerminalOptions> {
