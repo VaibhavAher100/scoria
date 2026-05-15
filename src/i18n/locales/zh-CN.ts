@@ -103,6 +103,9 @@ export const zhCN: TranslationKeys = {
 
   notices: {
     serverStartFailed: '终端服务器启动失败：{{message}}',
+    serverCrashed: '终端服务器崩溃（代码：{{code}}，信号：{{signal}}）',
+    serverRestartSuccess: '终端服务器重启成功',
+    serverRestartFailed: '终端服务器重启失败',
     wsReconnectFailed: 'WebSocket 重连失败',
     wsReconnectSuccess: 'WebSocket 重连成功',
     downloadingBinary: '正在下载终端服务器二进制文件...',
@@ -125,6 +128,9 @@ export const zhCN: TranslationKeys = {
       fileReferenceUnavailable: '无法从终端输出中解析到对应文件',
       fileReferenceOpenFailed: '无法打开终端输出中的文件引用',
       defaultShellChanged: '默认终端已切换为 {{shell}}',
+      initFailed: '初始化终端失败：{{message}}',
+      renderFailed: '渲染终端失败：{{message}}',
+      createFailed: '创建终端失败：{{message}}',
     },
     settings: {
       backgroundColorReset: '背景颜色已重置为默认值',
@@ -338,6 +344,7 @@ export const zhCN: TranslationKeys = {
   },
 
   terminalService: {
+    serverNotRunning: '终端服务器未运行',
     processNotStarted: '终端服务器进程未启动',
     portInfoTimeout: '等待端口信息超时',
     startFailedWithCode: '终端服务器启动失败（退出代码：{{code}}）',

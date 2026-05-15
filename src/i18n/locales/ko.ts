@@ -103,6 +103,9 @@ export const ko: TranslationKeys = {
 
   notices: {
     serverStartFailed: '터미널 서버 시작에 실패했습니다: {{message}}',
+    serverCrashed: '터미널 서버가 크래시되었습니다 (코드: {{code}}, 시그널: {{signal}})',
+    serverRestartSuccess: '터미널 서버가 다시 시작되었습니다',
+    serverRestartFailed: '터미널 서버를 다시 시작하지 못했습니다',
     wsReconnectFailed: 'WebSocket 재연결에 실패했습니다',
     wsReconnectSuccess: 'WebSocket이 성공적으로 재연결되었습니다',
     downloadingBinary: '터미널 서버 바이너리 다운로드 중...',
@@ -125,6 +128,9 @@ export const ko: TranslationKeys = {
       fileReferenceUnavailable: '터미널 출력에서 해당 파일을 찾을 수 없습니다',
       fileReferenceOpenFailed: '터미널 출력의 파일 참조를 열지 못했습니다',
       defaultShellChanged: 'Default terminal switched to {{shell}}',
+      initFailed: '터미널 초기화 실패: {{message}}',
+      renderFailed: '터미널 렌더링 실패: {{message}}',
+      createFailed: '터미널 생성 실패: {{message}}',
     },
     settings: {
       backgroundColorReset: '배경색을 기본값으로 재설정했습니다',
@@ -338,6 +344,7 @@ export const ko: TranslationKeys = {
   },
 
   terminalService: {
+    serverNotRunning: '터미널 서버가 실행 중이 아닙니다',
     processNotStarted: '터미널 서버 프로세스가 시작되지 않았습니다',
     portInfoTimeout: '포트 정보 대기 시간 초과',
     startFailedWithCode: '터미널 서버 시작 실패(종료 코드: {{code}})',

@@ -103,6 +103,9 @@ export const ja: TranslationKeys = {
 
   notices: {
     serverStartFailed: 'ターミナルサーバーの起動に失敗しました: {{message}}',
+    serverCrashed: 'ターミナルサーバーがクラッシュしました (コード: {{code}}, シグナル: {{signal}})',
+    serverRestartSuccess: 'ターミナルサーバーを再起動しました',
+    serverRestartFailed: 'ターミナルサーバーの再起動に失敗しました',
     wsReconnectFailed: 'WebSocket の再接続に失敗しました',
     wsReconnectSuccess: 'WebSocket の再接続に成功しました',
     downloadingBinary: 'ターミナルサーバーのバイナリをダウンロード中...',
@@ -125,6 +128,9 @@ export const ja: TranslationKeys = {
       fileReferenceUnavailable: 'ターミナル出力から対応するファイルを解決できませんでした',
       fileReferenceOpenFailed: 'ターミナル出力のファイル参照を開けませんでした',
       defaultShellChanged: 'Default terminal switched to {{shell}}',
+      initFailed: 'ターミナルの初期化に失敗しました: {{message}}',
+      renderFailed: 'ターミナルの描画に失敗しました: {{message}}',
+      createFailed: 'ターミナルの作成に失敗しました: {{message}}',
     },
     settings: {
       backgroundColorReset: '背景色を既定値にリセットしました',
@@ -338,6 +344,7 @@ export const ja: TranslationKeys = {
   },
 
   terminalService: {
+    serverNotRunning: 'ターミナルサーバーが起動していません',
     processNotStarted: 'ターミナルサーバープロセスが起動していません',
     portInfoTimeout: 'ポート情報の取得がタイムアウトしました',
     startFailedWithCode: 'ターミナルサーバーの起動に失敗しました（終了コード: {{code}}）',

@@ -143,7 +143,7 @@ export class TerminalService {
     await this.serverManager.ensureServer();
     const port = this.serverManager.getServerPort();
     if (port === null) {
-      throw new Error(t('terminalService.serverNotRunning') || '服务器未运行');
+      throw new Error(t('terminalService.serverNotRunning'));
     }
     return port;
   }

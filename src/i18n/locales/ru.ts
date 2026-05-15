@@ -103,6 +103,9 @@ export const ru: TranslationKeys = {
 
   notices: {
     serverStartFailed: 'Не удалось запустить сервер терминала: {{message}}',
+    serverCrashed: 'Сервер терминала аварийно завершился (код: {{code}}, сигнал: {{signal}})',
+    serverRestartSuccess: 'Сервер терминала успешно перезапущен',
+    serverRestartFailed: 'Не удалось перезапустить сервер терминала',
     wsReconnectFailed: 'Повторное подключение WebSocket не удалось',
     wsReconnectSuccess: 'WebSocket успешно переподключён',
     downloadingBinary: 'Загрузка бинарного файла сервера терминала...',
@@ -125,6 +128,9 @@ export const ru: TranslationKeys = {
       fileReferenceUnavailable: 'Не удалось определить файл по выводу терминала',
       fileReferenceOpenFailed: 'Не удалось открыть ссылку на файл из вывода терминала',
       defaultShellChanged: 'Default terminal switched to {{shell}}',
+      initFailed: 'Не удалось инициализировать терминал: {{message}}',
+      renderFailed: 'Не удалось отрисовать терминал: {{message}}',
+      createFailed: 'Не удалось создать терминал: {{message}}',
     },
     settings: {
       backgroundColorReset: 'Цвет фона сброшен до значения по умолчанию',
@@ -338,6 +344,7 @@ export const ru: TranslationKeys = {
   },
 
   terminalService: {
+    serverNotRunning: 'Сервер терминала не запущен',
     processNotStarted: 'Процесс сервера терминала не запущен',
     portInfoTimeout: 'Истекло время ожидания информации о порте',
     startFailedWithCode: 'Сервер терминала не запустился (код выхода: {{code}})',

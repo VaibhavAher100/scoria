@@ -118,6 +118,9 @@ export interface TranslationKeys {
   // Notice messages
   notices: {
     serverStartFailed: string;
+    serverCrashed: string;
+    serverRestartSuccess: string;
+    serverRestartFailed: string;
     wsReconnectFailed: string;
     wsReconnectSuccess: string;
     downloadingBinary: string;
@@ -140,6 +143,9 @@ export interface TranslationKeys {
       fileReferenceUnavailable: string;
       fileReferenceOpenFailed: string;
       defaultShellChanged: string;
+      initFailed: string;
+      renderFailed: string;
+      createFailed: string;
     };
     settings: {
       backgroundColorReset: string;
@@ -359,6 +365,7 @@ export interface TranslationKeys {
 
   // Terminal service
   terminalService: {
+    serverNotRunning: string;
     processNotStarted: string;
     portInfoTimeout: string;
     startFailedWithCode: string;

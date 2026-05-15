@@ -103,6 +103,9 @@ export const en: TranslationKeys = {
 
   notices: {
     serverStartFailed: 'Failed to start terminal server: {{message}}',
+    serverCrashed: 'Terminal server crashed (code: {{code}}, signal: {{signal}})',
+    serverRestartSuccess: 'Terminal server restarted successfully',
+    serverRestartFailed: 'Failed to restart terminal server',
     wsReconnectFailed: 'WebSocket reconnection failed',
     wsReconnectSuccess: 'WebSocket reconnected successfully',
     downloadingBinary: 'Downloading terminal server binary...',
@@ -125,6 +128,9 @@ export const en: TranslationKeys = {
       fileReferenceUnavailable: 'No matching file could be resolved from terminal output',
       fileReferenceOpenFailed: 'Failed to open file reference from terminal output',
       defaultShellChanged: 'Default terminal switched to {{shell}}',
+      initFailed: 'Failed to initialize terminal: {{message}}',
+      renderFailed: 'Failed to render terminal: {{message}}',
+      createFailed: 'Failed to create terminal: {{message}}',
     },
     settings: {
       backgroundColorReset: 'Background color reset to default',
@@ -338,6 +344,7 @@ export const en: TranslationKeys = {
   },
 
   terminalService: {
+    serverNotRunning: 'Terminal server is not running',
     processNotStarted: 'Terminal server process not started',
     portInfoTimeout: 'Timeout waiting for port information',
     startFailedWithCode: 'Terminal server failed to start (exit code: {{code}})',
