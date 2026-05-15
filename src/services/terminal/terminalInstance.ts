@@ -1254,11 +1254,18 @@ export class TerminalInstance {
     item.addEventListener('mouseenter', () => {
       submenu.addClass('is-visible');
       submenu.removeClass('is-flipped');
+      submenu.style.top = '0';
 
       // Adjust the submenu position
       const rect = submenu.getBoundingClientRect();
       if (rect.right > window.innerWidth) {
         submenu.addClass('is-flipped');
+      }
+
+      const adjustedRect = submenu.getBoundingClientRect();
+      if (adjustedRect.bottom > window.innerHeight) {
+        const topOffset = Math.min(0, window.innerHeight - adjustedRect.bottom - 8);
+        submenu.style.top = `${topOffset}px`;
       }
     });
 
