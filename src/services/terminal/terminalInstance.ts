@@ -11,6 +11,7 @@ import { t } from '@/i18n';
 import type { ServerManager } from '@/services/server/serverManager';
 import type { PtyClient } from '@/services/server/ptyClient';
 import type { PtyConfig, ShellEvent, ShellEventSource } from '@/services/server/types';
+import type { DefaultShellOption } from './terminalService';
 import { EnhancedKeyboardProtocol, formatPastedTerminalText } from './enhancedKeyboardProtocol';
 import {
   createSynchronizedOutputCompatibilityState,
@@ -181,6 +182,8 @@ export class TerminalInstance {
   private contextMenuCallbacks: {
     onNewTerminal?: () => void;
     onSplitTerminal?: (direction: 'horizontal' | 'vertical') => void;
+    getDefaultShellOptions?: () => DefaultShellOption[];
+    onDefaultShellChange?: (shellType: DefaultShellOption['shellType']) => void;
   } = {};
 
   // Current working directory (extracted from shell prompt output)
@@ -1075,6 +1078,19 @@ export class TerminalInstance {
     );
     menu.appendChild(splitSubmenu);
 
+    const defaultShellOptions = this.contextMenuCallbacks.getDefaultShellOptions?.() ?? [];
+    if (defaultShellOptions.length > 0 && this.contextMenuCallbacks.onDefaultShellChange) {
+      menu.appendChild(this.createSubmenuItem(
+        t('terminal.contextMenu.switchDefaultTerminal'),
+        'terminal',
+        defaultShellOptions.map((option) => ({
+          label: option.label,
+          icon: option.selected ? 'check' : 'blank',
+          onClick: () => this.contextMenuCallbacks.onDefaultShellChange?.(option.shellType),
+        }))
+      ));
+    }
+
     menu.appendChild(this.createSeparator());
 
     // Font size submenu
@@ -1319,6 +1335,8 @@ export class TerminalInstance {
       'chevron-up': '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"></path></svg>',
       'chevron-down': '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>',
       'x': '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>',
+      'check': '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>',
+      'blank': '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"></svg>',
     };
     return icons[icon] || '';
   }
@@ -1547,6 +1565,14 @@ export class TerminalInstance {
    */
   setOnSplitTerminal(callback: (direction: 'horizontal' | 'vertical') => void): void {
     this.contextMenuCallbacks.onSplitTerminal = callback;
+  }
+
+  setDefaultShellMenuCallbacks(
+    getOptions: () => DefaultShellOption[],
+    onChange: (shellType: DefaultShellOption['shellType']) => void,
+  ): void {
+    this.contextMenuCallbacks.getDefaultShellOptions = getOptions;
+    this.contextMenuCallbacks.onDefaultShellChange = onChange;
   }
 
   // ==================== Other Public Methods ====================

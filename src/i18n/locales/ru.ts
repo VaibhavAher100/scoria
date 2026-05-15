@@ -53,6 +53,7 @@ export const ru: TranslationKeys = {
       splitTerminal: 'Разделить терминал',
       splitHorizontal: 'Разделить по горизонтали',
       splitVertical: 'Разделить по вертикали',
+      switchDefaultTerminal: 'Switch default terminal',
       fontSize: 'Размер шрифта',
       fontIncrease: 'Увеличить размер шрифта',
       fontDecrease: 'Уменьшить размер шрифта',
@@ -123,6 +124,7 @@ export const ru: TranslationKeys = {
       failedCommandUnavailable: 'В этом сеансе терминала нет завершившихся с ошибкой команд',
       fileReferenceUnavailable: 'Не удалось определить файл по выводу терминала',
       fileReferenceOpenFailed: 'Не удалось открыть ссылку на файл из вывода терминала',
+      defaultShellChanged: 'Default terminal switched to {{shell}}',
     },
     settings: {
       backgroundColorReset: 'Цвет фона сброшен до значения по умолчанию',

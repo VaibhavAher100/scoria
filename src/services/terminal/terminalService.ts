@@ -11,13 +11,18 @@
 
 import type { App} from 'obsidian';
 import { Notice } from 'obsidian';
-import type { TerminalSettings} from '@/settings/settings';
-import { getCurrentPlatformShell, getCurrentPlatformCustomShellPath } from '@/settings/settings';
+import type { ShellType, TerminalSettings} from '@/settings/settings';
+import {
+  getCurrentPlatformShell,
+  getCurrentPlatformCustomShellPath,
+  setCurrentPlatformShell,
+} from '@/settings/settings';
 import type { TerminalInstance } from './terminalInstance';
 import { debugLog, debugWarn, errorLog } from '@/utils/logger';
 import { t } from '@/i18n';
 import type { ServerManager } from '@/services/server/serverManager';
 import type { PtyClient } from '@/services/server/ptyClient';
+import { getSelectableShellTypes } from './shellProfiles';
 
 // Preload the TerminalInstance module to avoid dynamic import latency when creating the first terminal
 let terminalInstanceModule: typeof import('./terminalInstance') | null = null;
@@ -27,6 +32,13 @@ const preloadTerminalInstance = async () => {
   }
   return terminalInstanceModule;
 };
+
+export interface DefaultShellOption {
+  shellType: ShellType;
+  label: string;
+  selected: boolean;
+}
+
 // Start preloading immediately
 void preloadTerminalInstance().catch((error) => {
   errorLog('[TerminalService] 预加载 TerminalInstance 失败:', error);
@@ -42,6 +54,7 @@ export class TerminalService {
   private settings: TerminalSettings;
   private serverManager: ServerManager;
   private getTerminalEnvironment: () => Record<string, string>;
+  private saveSettings: () => Promise<void>;
   
   // Terminal instance registry
   private terminals: Map<string, TerminalInstance> = new Map();
@@ -54,11 +67,13 @@ export class TerminalService {
     settings: TerminalSettings,
     serverManager: ServerManager,
     getTerminalEnvironment: () => Record<string, string> = () => ({}),
+    saveSettings: () => Promise<void> = async () => undefined,
   ) {
     this.app = app;
     this.settings = settings;
     this.serverManager = serverManager;
     this.getTerminalEnvironment = getTerminalEnvironment;
+    this.saveSettings = saveSettings;
     
     // Listen for server events
     this.setupServerEventHandlers();
@@ -138,6 +153,28 @@ export class TerminalService {
    */
   getPtyClient(): PtyClient {
     return this.serverManager.pty();
+  }
+
+  getDefaultShellOptions(): DefaultShellOption[] {
+    const currentShell = getCurrentPlatformShell(this.settings);
+    const shellTypes = getSelectableShellTypes(currentShell);
+    return shellTypes.map((shellType) => ({
+      shellType,
+      label: t(`shellOptions.${shellType}`),
+      selected: shellType === currentShell,
+    }));
+  }
+
+  async setDefaultShell(shellType: ShellType): Promise<void> {
+    if (getCurrentPlatformShell(this.settings) === shellType) {
+      return;
+    }
+
+    setCurrentPlatformShell(this.settings, shellType);
+    await this.saveSettings();
+    new Notice(t('notices.terminal.defaultShellChanged', {
+      shell: t(`shellOptions.${shellType}`),
+    }));
   }
 
   /**

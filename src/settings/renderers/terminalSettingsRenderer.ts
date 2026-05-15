@@ -3,12 +3,11 @@
  * Responsible for rendering all terminal-related settings
  */
 
-import type { App, ColorComponent, DropdownComponent, TextComponent } from 'obsidian';
+import type { App, ColorComponent, TextComponent } from 'obsidian';
 import { Modal, Setting, Notice, Platform, ToggleComponent, setIcon } from 'obsidian';
 import * as fs from 'fs';
-import * as path from 'path';
 import type { RendererContext } from '../types';
-import type { BinaryDownloadSource, PresetScript, ShellType, TerminalShellType } from '../settings';
+import type { BinaryDownloadSource, PresetScript, ShellType } from '../settings';
 import { 
   DEFAULT_PRESET_SCRIPTS,
   DEFAULT_SERVER_CONNECTION_SETTINGS,
@@ -22,6 +21,7 @@ import { BaseSettingsRenderer } from './baseRenderer';
 import { t } from '../../i18n';
 import { PresetScriptModal } from '../../ui/terminal/presetScriptModal';
 import { renderPresetScriptIcon } from '../../ui/terminal/presetScriptIcons';
+import { getSelectableShellTypes, isTerminalShellType } from '../../services/terminal/shellProfiles';
 import { clamp, normalizeBackgroundPosition, normalizeBackgroundSize, toCssUrl } from '../../utils/styleUtils';
 
 const NEW_INSTANCE_BEHAVIORS = [
@@ -39,7 +39,6 @@ const NEW_INSTANCE_BEHAVIORS = [
 const CURSOR_STYLES = ['block', 'underline', 'bar'] as const;
 const BACKGROUND_IMAGE_SIZES = ['cover', 'contain', 'auto'] as const;
 const PREFERRED_RENDERERS = ['canvas', 'webgl'] as const;
-const OPTIONAL_TERMINAL_SHELLS: TerminalShellType[] = ['tmux'];
 
 type NewInstanceBehavior = (typeof NEW_INSTANCE_BEHAVIORS)[number];
 type CursorStyle = (typeof CURSOR_STYLES)[number];
@@ -150,56 +149,6 @@ function validateShellPath(path: string): boolean {
   }
 }
 
-const isTerminalShellType = (value: string): value is TerminalShellType =>
-  OPTIONAL_TERMINAL_SHELLS.includes(value as TerminalShellType);
-
-const TERMINAL_SHELL_COMMON_PATHS: Record<TerminalShellType, string[]> = {
-  tmux: [
-    '/opt/homebrew/bin/tmux',
-    '/usr/local/bin/tmux',
-    '/usr/bin/tmux',
-    '/bin/tmux',
-    'C:\\msys64\\usr\\bin\\tmux.exe',
-    'C:\\Program Files\\Git\\usr\\bin\\tmux.exe',
-  ],
-};
-
-function detectAvailableTerminalShells(): TerminalShellType[] {
-  if (Platform.isMobile) return [];
-
-  return OPTIONAL_TERMINAL_SHELLS.filter((shellType) =>
-    isTerminalShellAvailable(shellType)
-  );
-}
-
-function isTerminalShellAvailable(shellType: TerminalShellType): boolean {
-  return commandExists(shellType)
-    || TERMINAL_SHELL_COMMON_PATHS[shellType].some((candidate) => fs.existsSync(candidate));
-}
-
-function commandExists(command: string): boolean {
-  const pathValue = process.env.PATH ?? '';
-  if (!pathValue) return false;
-
-  const pathEntries = pathValue.split(path.delimiter).filter(Boolean);
-  const extensions = process.platform === 'win32'
-    ? (process.env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD')
-      .split(';')
-      .filter(Boolean)
-    : [''];
-
-  for (const entry of pathEntries) {
-    for (const extension of extensions) {
-      const candidate = path.join(entry, process.platform === 'win32' ? `${command}${extension}` : command);
-      if (fs.existsSync(candidate)) {
-        return true;
-      }
-    }
-  }
-
-  return false;
-}
-
 /**
  * Terminal settings renderer
  * Handles rendering for Shell program, instance behavior, theme, and appearance settings
@@ -260,19 +209,9 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       .setName(t('settingsDetails.terminal.defaultShell'))
       .setDesc(t('settingsDetails.terminal.defaultShellDesc'))
       .addDropdown(dropdown => {
-        // Show different options based on the platform
-        if (process.platform === 'win32') {
-          dropdown.addOption('cmd', t('shellOptions.cmd'));
-          dropdown.addOption('powershell', t('shellOptions.powershell'));
-          dropdown.addOption('pwsh', t('shellOptions.pwsh'));
-          dropdown.addOption('gitbash', t('shellOptions.gitbash'));
-          dropdown.addOption('wsl', t('shellOptions.wsl'));
-        } else if (process.platform === 'darwin' || process.platform === 'linux') {
-          dropdown.addOption('bash', t('shellOptions.bash'));
-          dropdown.addOption('zsh', t('shellOptions.zsh'));
+        for (const shellType of getSelectableShellTypes(currentShell)) {
+          dropdown.addOption(shellType, t(`shellOptions.${shellType}`));
         }
-        this.addDetectedTerminalShellOptions(dropdown, currentShell);
-        dropdown.addOption('custom', t('shellOptions.custom'));
 
         dropdown.setValue(currentShell);
         dropdown.onChange((value) => {
@@ -355,27 +294,6 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         
         return text;
       });
-  }
-
-  private addDetectedTerminalShellOptions(
-    dropdown: DropdownComponent,
-    currentShell: ShellType,
-  ): void {
-    const added = new Set<TerminalShellType>();
-    const addOption = (shellType: TerminalShellType): void => {
-      if (added.has(shellType)) return;
-      dropdown.addOption(shellType, t(`shellOptions.${shellType}`));
-      added.add(shellType);
-    };
-
-    if (isTerminalShellType(currentShell)) {
-      addOption(currentShell);
-    }
-
-    for (const shellType of detectAvailableTerminalShells()) {
-      addOption(shellType);
-    }
-    dropdown.setValue(currentShell);
   }
 
   /**

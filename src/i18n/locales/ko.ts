@@ -53,6 +53,7 @@ export const ko: TranslationKeys = {
       splitTerminal: '터미널 분할',
       splitHorizontal: '가로 분할',
       splitVertical: '세로 분할',
+      switchDefaultTerminal: 'Switch default terminal',
       fontSize: '글꼴 크기',
       fontIncrease: '글꼴 크기 증가',
       fontDecrease: '글꼴 크기 감소',
@@ -123,6 +124,7 @@ export const ko: TranslationKeys = {
       failedCommandUnavailable: '이 터미널 세션에는 실패한 명령이 없습니다',
       fileReferenceUnavailable: '터미널 출력에서 해당 파일을 찾을 수 없습니다',
       fileReferenceOpenFailed: '터미널 출력의 파일 참조를 열지 못했습니다',
+      defaultShellChanged: 'Default terminal switched to {{shell}}',
     },
     settings: {
       backgroundColorReset: '배경색을 기본값으로 재설정했습니다',

@@ -53,6 +53,7 @@ export const ja: TranslationKeys = {
       splitTerminal: 'ターミナルを分割',
       splitHorizontal: '横に分割',
       splitVertical: '縦に分割',
+      switchDefaultTerminal: 'Switch default terminal',
       fontSize: 'フォントサイズ',
       fontIncrease: 'フォントサイズを大きく',
       fontDecrease: 'フォントサイズを小さく',
@@ -123,6 +124,7 @@ export const ja: TranslationKeys = {
       failedCommandUnavailable: 'このターミナルセッションには失敗したコマンドがありません',
       fileReferenceUnavailable: 'ターミナル出力から対応するファイルを解決できませんでした',
       fileReferenceOpenFailed: 'ターミナル出力のファイル参照を開けませんでした',
+      defaultShellChanged: 'Default terminal switched to {{shell}}',
     },
     settings: {
       backgroundColorReset: '背景色を既定値にリセットしました',

@@ -53,6 +53,7 @@ export const en: TranslationKeys = {
       splitTerminal: 'Split terminal',
       splitHorizontal: 'Split horizontal',
       splitVertical: 'Split vertical',
+      switchDefaultTerminal: 'Switch default terminal',
       fontSize: 'Font size',
       fontIncrease: 'Increase font size',
       fontDecrease: 'Decrease font size',
@@ -123,6 +124,7 @@ export const en: TranslationKeys = {
       failedCommandUnavailable: 'No failed command found in this terminal session',
       fileReferenceUnavailable: 'No matching file could be resolved from terminal output',
       fileReferenceOpenFailed: 'Failed to open file reference from terminal output',
+      defaultShellChanged: 'Default terminal switched to {{shell}}',
     },
     settings: {
       backgroundColorReset: 'Background color reset to default',

@@ -64,6 +64,7 @@ export interface TranslationKeys {
       splitTerminal: string;
       splitHorizontal: string;
       splitVertical: string;
+      switchDefaultTerminal: string;
       fontSize: string;
       fontIncrease: string;
       fontDecrease: string;
@@ -138,6 +139,7 @@ export interface TranslationKeys {
       failedCommandUnavailable: string;
       fileReferenceUnavailable: string;
       fileReferenceOpenFailed: string;
+      defaultShellChanged: string;
     };
     settings: {
       backgroundColorReset: string;

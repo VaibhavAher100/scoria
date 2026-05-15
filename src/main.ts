@@ -116,7 +116,8 @@ export default class TerminalPlugin extends Plugin {
           () => ({
             ...(this._claudeCodeIdeBridge?.getTerminalEnv() ?? {}),
             ...(this._agentContextBridge?.getTerminalEnv() ?? {}),
-          })
+          }),
+          () => this.saveSettings(),
         );
       
       debugLog('[TerminalPlugin] TerminalService initialized');

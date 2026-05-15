@@ -53,6 +53,7 @@ export const zhCN: TranslationKeys = {
       splitTerminal: '拆分终端',
       splitHorizontal: '水平拆分',
       splitVertical: '垂直拆分',
+      switchDefaultTerminal: '切换默认终端',
       fontSize: '字体大小',
       fontIncrease: '增大字体',
       fontDecrease: '减小字体',
@@ -123,6 +124,7 @@ export const zhCN: TranslationKeys = {
       failedCommandUnavailable: '当前终端会话中没有失败命令记录',
       fileReferenceUnavailable: '无法从终端输出中解析到对应文件',
       fileReferenceOpenFailed: '无法打开终端输出中的文件引用',
+      defaultShellChanged: '默认终端已切换为 {{shell}}',
     },
     settings: {
       backgroundColorReset: '背景颜色已重置为默认值',

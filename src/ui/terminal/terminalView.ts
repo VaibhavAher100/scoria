@@ -285,6 +285,17 @@ export class TerminalView extends ItemView {
         void this.splitTerminal(direction);
       });
 
+      this.terminalInstance.setDefaultShellMenuCallbacks(
+        () => this.terminalService?.getDefaultShellOptions() ?? [],
+        (shellType) => {
+          void this.terminalService?.setDefaultShell(shellType).catch((error) => {
+            const message = error instanceof Error ? error.message : String(error);
+            errorLog('[TerminalView] Failed to switch default shell:', error);
+            new Notice(message);
+          });
+        }
+      );
+
       this.updateAppearanceStyles();
       this.renderTerminal();
       this.setupResizeObserver();
