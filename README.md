@@ -4,9 +4,9 @@
 
 <img src="assets\termy-tg-avatar-transparent.svg" width="150" alt="Termy logo" />
 
-*A desktop-only terminal workspace for Obsidian*
+*AI CLI-integrated terminal for Obsidian*
 
-Full terminal emulation for Obsidian with a native Rust PTY backend, split panes, reusable workflows, file-aware drag and drop, and AI CLI integrations.
+Powered by xterm.js and a native Rust PTY backend, with split panes, reusable workflows, and file-aware interactions.
 
 [![Version](https://img.shields.io/badge/version-1.3.6-7c3aed?style=for-the-badge)](./manifest.json)
 [![Obsidian](https://img.shields.io/badge/Obsidian-Desktop%20Only-8b5cf6?style=for-the-badge)](https://obsidian.md/)

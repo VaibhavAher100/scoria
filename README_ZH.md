@@ -4,9 +4,9 @@
 
 <img src="assets\termy-tg-avatar-transparent.svg" width="150" alt="Termy logo" />
 
-*面向 Obsidian 桌面端的终端工作区插件*
+*面向 Obsidian 的 AI CLI 集成终端*
 
-Termy 为 Obsidian 提供完整终端体验：原生 Rust PTY 后端、分屏、多会话、可复用工作流、文件感知拖拽，以及面向 AI CLI 的上下文集成
+由 xterm.js 与原生 Rust PTY 后端驱动，支持分屏、多会话、可复用工作流和文件感知交互。
 
 [![Version](https://img.shields.io/badge/version-1.3.5-7c3aed?style=for-the-badge)](./manifest.json)
 [![Obsidian](https://img.shields.io/badge/Obsidian-Desktop%20Only-8b5cf6?style=for-the-badge)](https://obsidian.md/)
