@@ -5,6 +5,12 @@ All notable changes to Termy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2026-05-16
+
+### Fixed
+- Fixed Ctrl+C and Ctrl+V not firing on consecutive presses while Ctrl was still held in PowerShell and other shells using win32 input mode. The same shortcut-suppression rule that previously broke repeat Shift+Enter newlines now keeps the trailing keyup of the chord suppressed but lets a fresh Ctrl+C or Ctrl+V keydown trigger another copy or paste.
+- Fixed Termy's right-click menu stealing Claude Code's "right-click to paste" gesture. Active Claude Code TUI sessions now suppress the Termy menu so Claude Code's own paste fires once instead of being doubled by an extra Termy paste; other shells keep the Termy context menu, and Shift+RightClick always opens the Termy menu as an escape hatch.
+
 ## [1.4.0] - 2026-05-16
 
 ### Added
