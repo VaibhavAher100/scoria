@@ -188,7 +188,6 @@ export interface TranslationKeys {
       feedbackLink: string;
       communityLink: string;
       changelog: string;
-      reload: string;
     };
   };
 

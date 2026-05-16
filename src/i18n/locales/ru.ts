@@ -172,7 +172,6 @@ export const ru: TranslationKeys = {
       feedbackLink: 'GitHub',
       communityLink: 'Telegram',
       changelog: 'Список изменений',
-      reload: 'Перезагрузить плагин',
     },
   },
 

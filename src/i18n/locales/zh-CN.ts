@@ -172,7 +172,6 @@ export const zhCN: TranslationKeys = {
       feedbackLink: 'GitHub',
       communityLink: 'Telegram 群组',
       changelog: '更新日志',
-      reload: '重载插件',
     },
   },
 

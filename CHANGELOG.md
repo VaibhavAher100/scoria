@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.3.7] - 2026-05-16
 
+### Removed
+- Removed the programmatic plugin self-disable/re-enable flow used by the settings reload button and the dev-install auto-reload watcher. Reloading Termy after `pnpm install:dev` now requires a manual reload from Obsidian's plugin settings, in line with the Obsidian developer policy that disallows silent plugin reloads.
+
 ### Added
 - Added a terminal context menu action for switching the default shell directly from an open terminal.
 

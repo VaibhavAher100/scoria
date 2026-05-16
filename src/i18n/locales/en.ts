@@ -172,7 +172,6 @@ export const en: TranslationKeys = {
       feedbackLink: 'GitHub',
       communityLink: 'Telegram',
       changelog: 'Changelog',
-      reload: 'Reload plugin',
     },
   },
 

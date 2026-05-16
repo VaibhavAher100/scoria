@@ -172,7 +172,6 @@ export const ja: TranslationKeys = {
       feedbackLink: 'GitHub',
       communityLink: 'Telegram',
       changelog: '更新ログ',
-      reload: 'プラグインを再読み込み',
     },
   },
 

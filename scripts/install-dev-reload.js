@@ -1,55 +1,42 @@
+/**
+ * Helpers for writing/clearing the dev-install sentinel file.
+ *
+ * The sentinel is a vault-local marker (`.termy-dev-reload.json`) written into
+ * the installed plugin directory while `pnpm install:dev` is replacing files.
+ * A running Termy instance reads it from `ServerManager` to suppress
+ * WebSocket auto-reconnect and server auto-restart for the duration of the
+ * install, so the freshly written native binary is not held open by an
+ * orphaned reconnect loop.
+ *
+ * The plugin never silently disables/enables itself — the user reloads Termy
+ * manually after `pnpm install:dev` finishes.
+ */
+
 import fs from 'fs';
 import path from 'path';
 
 export const DEV_RELOAD_REQUEST_FILE = '.termy-dev-reload.json';
 export const DEV_RELOAD_PHASE_INSTALLING = 'installing';
-export const DEV_RELOAD_PHASE_RELOAD = 'reload';
 
 function createRequestId() {
   return `${Date.now()}-${process.pid}-${Math.random().toString(36).slice(2)}`;
 }
 
-export function createDevReloadRequest({
+export function createDevInstallRequest({
   pluginId = 'termy',
   requestId = createRequestId(),
   requestedAt = new Date(),
-  phase = DEV_RELOAD_PHASE_RELOAD,
-  activeUntil,
+  activeUntil = new Date(Date.now() + 2 * 60 * 1000),
   pid = process.pid,
 } = {}) {
-  const request = {
+  return {
     pluginId,
     requestId,
-    phase,
+    phase: DEV_RELOAD_PHASE_INSTALLING,
     requestedAt: requestedAt.toISOString(),
+    activeUntil: activeUntil.toISOString(),
     pid,
   };
-
-  if (activeUntil) {
-    request.activeUntil = activeUntil.toISOString();
-  }
-
-  return request;
-}
-
-export function writeDevReloadRequest(targetDir, options = {}) {
-  const request = createDevReloadRequest(options);
-  const requestPath = path.join(targetDir, DEV_RELOAD_REQUEST_FILE);
-
-  fs.writeFileSync(requestPath, `${JSON.stringify(request, null, 2)}\n`);
-
-  return {
-    request,
-    requestPath,
-  };
-}
-
-export function createDevInstallRequest(options = {}) {
-  return createDevReloadRequest({
-    ...options,
-    phase: DEV_RELOAD_PHASE_INSTALLING,
-    activeUntil: options.activeUntil ?? new Date(Date.now() + 2 * 60 * 1000),
-  });
 }
 
 export function writeDevInstallRequest(targetDir, options = {}) {

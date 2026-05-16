@@ -8,7 +8,6 @@
  * Options:
  *   --kill      Close and restart Obsidian
  *   --no-build  Skip building (already done by pnpm install:dev)
- *   --no-reload Skip requesting a running Termy instance to reload itself
  *   --reset     Reset saved configuration
  */
 
@@ -20,7 +19,6 @@ import { fileURLToPath } from 'url';
 import {
   clearDevInstallRequest,
   writeDevInstallRequest,
-  writeDevReloadRequest,
 } from './install-dev-reload.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -32,7 +30,6 @@ const CONFIG_FILE = path.join(ROOT_DIR, '.dev-install-config.json');
 const args = process.argv.slice(2);
 const KILL_OBSIDIAN = args.includes('--kill');
 const SKIP_BUILD = args.includes('--no-build');
-const SKIP_RELOAD = args.includes('--no-reload');
 const RESET_CONFIG = args.includes('--reset');
 
 // Get vault path from first non-flag argument
@@ -365,7 +362,10 @@ async function main() {
     killObsidian();
     await sleep(1000);
     log('');
-  } else if (!SKIP_RELOAD) {
+  } else {
+    // Mark this directory as being installed into so any running Termy
+    // server stops auto-reconnecting while files are being replaced.
+    // The plugin itself will not auto-reload; the user must reload manually.
     writeDevInstallRequest(targetDir);
     process.once('exit', () => {
       clearDevInstallRequest(targetDir);
@@ -411,20 +411,7 @@ async function main() {
   log(`  binaries/${binaryName}`, 'green');
   log('');
 
-  // 6. Request a running Termy plugin to reload itself
-  if (!KILL_OBSIDIAN && !SKIP_RELOAD) {
-    log('Requesting Termy reload...', 'cyan');
-    try {
-      writeDevReloadRequest(targetDir);
-      log('  Reload request written', 'green');
-      log('  First setup after this change may still need one manual reload or --kill', 'yellow');
-    } catch (e) {
-      log(`  Failed to write reload request: ${e.message}`, 'yellow');
-    }
-    log('');
-  }
-
-  // 7. Restart Obsidian
+  // 6. Restart Obsidian
   if (KILL_OBSIDIAN) {
     log('Starting Obsidian...', 'cyan');
     await sleep(500);
@@ -438,7 +425,7 @@ async function main() {
   if (!KILL_OBSIDIAN) {
     log('Next steps:', 'cyan');
     log('  1. Open Obsidian if it is not already running', 'yellow');
-    log('  2. Enable "Termy" if it is not enabled yet', 'yellow');
+    log('  2. Reload the "Termy" plugin from Obsidian settings to pick up the new build', 'yellow');
     log('  3. Ctrl+P → "Termy" to open\n', 'yellow');
   }
 

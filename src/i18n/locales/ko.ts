@@ -172,7 +172,6 @@ export const ko: TranslationKeys = {
       feedbackLink: 'GitHub',
       communityLink: 'Telegram',
       changelog: '변경 로그',
-      reload: '플러그인 다시 로드',
     },
   },
 

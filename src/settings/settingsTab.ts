@@ -92,23 +92,6 @@ export class TerminalSettingTab extends PluginSettingTab {
       text: t('settings.header.communityLink'),
       href: 'https://t.me/+t6oRqhaw8c1jNzE1'
     });
-
-    const reloadBtn = actionsGroup.createEl('button', { cls: 'clickable-icon' });
-    setIcon(reloadBtn, 'refresh-cw');
-    reloadBtn.setAttribute('aria-label', t('settings.header.reload'));
-    reloadBtn.addEventListener('click', () => {
-      void this.reloadPlugin();
-    });
-  }
-
-  private async reloadPlugin(): Promise<void> {
-    const pluginId = this.plugin.manifest.id;
-    // @ts-expect-error -- Accessing Obsidian internal API
-    await this.app.plugins.disablePlugin(pluginId);
-    // @ts-expect-error -- Accessing Obsidian internal API
-    await this.app.plugins.enablePlugin(pluginId);
-    // @ts-expect-error -- Accessing Obsidian internal API
-    this.app.setting.openTabById(pluginId);
   }
 }
 
