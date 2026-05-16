@@ -4,9 +4,8 @@
 
  */
 
-import { platform } from 'os';
-import { exec } from 'child_process';
 import { debugLog, debugWarn, errorLog } from '@/utils/logger';
+import { getPlatform, isWindows } from '@/utils/platform';
 import { t } from '@/i18n';
 import type { ServerManager } from '@/services/server/serverManager';
 import type { PtyClient } from '@/services/server/ptyClient';
@@ -26,6 +25,14 @@ import {
 } from './claudeCodeTuiSupport';
 import { ClaudeCodeSessionState } from './claudeCodeSessionState';
 import { TerminalTitleState } from './terminalTitleState';
+import {
+  extractCmdCwd,
+  extractCwdFromPromptLines,
+  extractGitBashPromptCwd,
+  extractGitBashWindowTitleCwd,
+  extractPowerShellCwd,
+  extractWslPromptCwd,
+} from './promptCwdParsers';
 import { shell } from 'electron';
 
 // xterm.js CSS (static import handled by esbuild)
@@ -669,7 +676,7 @@ export class TerminalInstance {
   }
 
   private updateWin32InputMode(data: string): void {
-    if (platform() !== 'win32') {
+    if (!isWindows()) {
       return;
     }
 
@@ -1727,8 +1734,12 @@ export class TerminalInstance {
 
 
   /**
-   * Extract the current working directory from shell output
-   * Supports OSC sequences and PowerShell/CMD/Git Bash/Bash prompt formats
+   * Extract the current working directory from shell output.
+   *
+   * Recognizes (in priority order): OSC 7 (standard), OSC 9;9
+   * (Windows Terminal / PowerShell), the Git Bash window-title OSC 0,
+   * and finally the prompt-string parsers in `promptCwdParsers.ts`
+   * for cmd / PowerShell / Git Bash / WSL.
    */
   private extractCwdFromOutput(data: string): void {
     // OSC 7 format (standard): \x1b]7;file://hostname/path\x07 or \x1b]7;file://hostname/path\x1b\\
@@ -1744,7 +1755,7 @@ export class TerminalInstance {
         // Ignore decode failures
       }
     }
-    
+
     // OSC 9;9 format (Windows Terminal/PowerShell): \x1b]9;9;path\x07
     // eslint-disable-next-line no-control-regex -- Need to match ANSI control sequences
     const osc9Match = data.match(/\x1b\]9;9;([^\x07\x1b]+)[\x07\x1b]/);
@@ -1753,62 +1764,44 @@ export class TerminalInstance {
       debugLog('[Terminal CWD] OSC9 matched:', this.currentCwd);
       return;
     }
-    
-    // OSC 0 format (window title, used by Git Bash): \x1b]0;MINGW64:/path\x07
-    // eslint-disable-next-line no-control-regex -- Need to match ANSI control sequences
-    const osc0Match = data.match(/\x1b\]0;(?:MINGW(?:64|32)|MSYS):([^\x07]+)\x07/);
-    if (osc0Match) {
-      let path = osc0Match[1];
-      // Convert the Git Bash path format to Windows format
-      if (/^\/[a-zA-Z]\//.test(path)) {
-        const driveLetter = path[1].toUpperCase();
-        path = `${driveLetter}:${path.substring(2).replace(/\//g, '\\')}`;
-      }
-      this.currentCwd = path;
-      debugLog('[Terminal CWD] OSC0 (Git Bash) matched:', path);
+
+    // OSC 0 (Git Bash window title): \x1b]0;MINGW64:/path\x07
+    const gitBashWindowTitleCwd = extractGitBashWindowTitleCwd(data);
+    if (gitBashWindowTitleCwd) {
+      this.currentCwd = gitBashWindowTitleCwd;
+      debugLog('[Terminal CWD] OSC0 (Git Bash) matched:', gitBashWindowTitleCwd);
       return;
     }
-    
-    // Prompt parsing (fallback for Windows shells)
-    // eslint-disable-next-line no-control-regex -- Need to match ANSI control sequences
+
+    // Prompt parsing (fallback for shells that do not emit OSC sequences).
+    // eslint-disable-next-line no-control-regex -- Need to strip CSI sequences before prompt matching
     const cleanData = data.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
-    
-    // PowerShell prompt: PS path>
-    const psMatch = cleanData.match(/PS ([A-Za-z]:[^>\r\n]+)>/);
-    if (psMatch) {
-      this.currentCwd = psMatch[1].trimEnd();
-      debugLog('[Terminal CWD] PowerShell prompt matched:', this.currentCwd);
+
+    const psCwd = extractPowerShellCwd(cleanData);
+    if (psCwd) {
+      this.currentCwd = psCwd;
+      debugLog('[Terminal CWD] PowerShell prompt matched:', psCwd);
       return;
     }
-    
-    // CMD prompt: path>
-    const cmdMatch = cleanData.match(/^([A-Za-z]:\\[^>\r\n]*)>/m);
-    if (cmdMatch) {
-      this.currentCwd = cmdMatch[1].trimEnd();
-      debugLog('[Terminal CWD] CMD prompt matched:', this.currentCwd);
+
+    const cmdCwd = extractCmdCwd(cleanData);
+    if (cmdCwd) {
+      this.currentCwd = cmdCwd;
+      debugLog('[Terminal CWD] CMD prompt matched:', cmdCwd);
       return;
     }
-    
-    // Git Bash prompt: user@host MINGW64 /path
-    const gitBashMatch = cleanData.match(/(?:MINGW(?:64|32)|MSYS)\s+([/~][^\r\n$]*)/);
-    if (gitBashMatch) {
-      let path = gitBashMatch[1].trimEnd();
-      if (/^\/[a-zA-Z]\//.test(path)) {
-        const driveLetter = path[1].toUpperCase();
-        path = `${driveLetter}:${path.substring(2).replace(/\//g, '\\')}`;
-      } else if (path.startsWith('~')) {
-        path = path.replace('~', process.env.USERPROFILE || '');
-      }
-      this.currentCwd = path;
-      debugLog('[Terminal CWD] Git Bash prompt matched:', this.currentCwd);
+
+    const gitBashCwd = extractGitBashPromptCwd(cleanData, process.env.USERPROFILE ?? '');
+    if (gitBashCwd) {
+      this.currentCwd = gitBashCwd;
+      debugLog('[Terminal CWD] Git Bash prompt matched:', gitBashCwd);
       return;
     }
-    
-    // WSL prompt: user@host:/mnt/c/path$ or user@host:~$
-    const wslMatch = cleanData.match(/:\s*(\/[^\s$#>\r\n]+)\s*[$#]/);
-    if (wslMatch) {
-      this.currentCwd = wslMatch[1];
-      debugLog('[Terminal CWD] WSL prompt matched:', this.currentCwd);
+
+    const wslCwd = extractWslPromptCwd(cleanData);
+    if (wslCwd) {
+      this.currentCwd = wslCwd;
+      debugLog('[Terminal CWD] WSL prompt matched:', wslCwd);
     }
   }
 
@@ -1820,10 +1813,62 @@ export class TerminalInstance {
   }
 
   /**
-   * Get the current working directory
+   * Get the current working directory.
+   *
+   * Strategy:
+   *  1. Pull the prompt straight off the xterm screen at the cursor
+   *     row. This is the reliable path for cmd under conpty (conpty
+   *     sends cursor-positioning escapes instead of full prompt
+   *     strings, but the rendered cells always show what the user
+   *     sees) and is also a no-op upgrade for shells that already
+   *     populate `currentCwd` via OSC 7/9;9 — the screen value
+   *     matches what they wrote anyway.
+   *  2. Trust `currentCwd` as the second-best source. It carries
+   *     OSC-derived values that may be slightly fresher than the
+   *     screen if the user is mid-typing a new command.
+   *  3. Fall back to the initial cwd as a last resort.
+   *
+   * The screen value is intentionally NOT written back into
+   * `currentCwd`: keeping screen-derived reads pure avoids polluting
+   * the streaming-parser state in cases where the screen lags behind
+   * an already-emitted OSC sequence.
    */
   getCwd(): string {
+    const screenCwd = this.readCwdFromScreen();
+    if (screenCwd) {
+      if (screenCwd !== this.currentCwd) {
+        debugLog('[Terminal CWD] Read from screen:', screenCwd);
+      }
+      return screenCwd;
+    }
     return this.currentCwd || this.getInitialCwd();
+  }
+
+  /**
+   * Read the cwd from the xterm.js buffer at the current cursor row.
+   * Falls back to the previous line when the prompt may span two
+   * rows (e.g. Git Bash's `\nuser@host MINGW64 /c/path\n$`).
+   */
+  private readCwdFromScreen(): string | null {
+    try {
+      const buffer = this.xterm.buffer.active;
+      const cursorAbsoluteRow = buffer.baseY + buffer.cursorY;
+
+      const cursorLine = buffer.getLine(cursorAbsoluteRow)?.translateToString(true) ?? '';
+      const previousLine =
+        cursorAbsoluteRow > 0
+          ? (buffer.getLine(cursorAbsoluteRow - 1)?.translateToString(true) ?? null)
+          : null;
+
+      return extractCwdFromPromptLines(
+        cursorLine,
+        previousLine,
+        process.env.USERPROFILE ?? ''
+      );
+    } catch (error) {
+      debugWarn('[Terminal CWD] readCwdFromScreen failed:', error);
+      return null;
+    }
   }
 
   navigatePrompt(direction: 'previous' | 'next'): boolean {
@@ -1927,49 +1972,38 @@ export class TerminalInstance {
   }
 
   /**
-   * Open the specified path in the file manager
-   * @param path The path to open
+   * Open the specified path in the OS file manager.
+   *
+   * Termy invokes this only with directory paths (from `getCwd()`),
+   * so Electron's `shell.openPath` is enough on every platform — it
+   * defers to Explorer / Finder / xdg-open and removes the need to
+   * spawn a child process or build a shell command string.
+   *
+   * @param targetPath The directory path to open
    */
   private openInFileManager(targetPath: string): void {
-    const currentPlatform = platform();
-    
+    const currentPlatform = getPlatform();
+
     debugLog('[Terminal] Opening in file manager, original path:', targetPath);
-    
+
     let finalPath = targetPath;
-    
+
     // If this is a WSL terminal, convert the WSL path to a Windows path
     if (currentPlatform === 'win32' && this.shellType === 'wsl' && targetPath.startsWith('/mnt/')) {
       finalPath = this.convertWslPathToWindows(targetPath);
       debugLog('[Terminal] Converted WSL path to Windows path:', { original: targetPath, converted: finalPath });
     }
-    
+
     debugLog('[Terminal] Final path for file manager:', finalPath);
-    
-    if (currentPlatform === 'win32') {
-      // Windows: use explorer, which opens a foreground window
-      // Note: explorer may return a non-zero exit code even on success; ignore it
-      exec(`explorer "${finalPath}"`);
-    } else if (currentPlatform === 'darwin') {
-      // macOS: use open
-      exec(`open "${finalPath}"`, (error: Error | null) => {
-        if (error) {
-          errorLog('[Terminal] Failed to open in Finder:', error);
-          void shell.openPath(finalPath).catch((openError) => {
-            errorLog('[Terminal] Failed to open path via shell:', openError);
-          });
-        }
-      });
-    } else {
-      // Linux: use xdg-open
-      exec(`xdg-open "${finalPath}"`, (error: Error | null) => {
-        if (error) {
-          errorLog('[Terminal] Failed to open in file manager:', error);
-          void shell.openPath(finalPath).catch((openError) => {
-            errorLog('[Terminal] Failed to open path via shell:', openError);
-          });
-        }
-      });
-    }
+
+    void shell.openPath(finalPath).then((errorMessage) => {
+      // Electron returns a non-empty string on failure, otherwise empty.
+      if (errorMessage) {
+        errorLog('[Terminal] Failed to open path via shell:', errorMessage);
+      }
+    }).catch((openError: unknown) => {
+      errorLog('[Terminal] Failed to open path via shell:', openError);
+    });
   }
 
   /**
@@ -2001,7 +2035,7 @@ export class TerminalInstance {
     
     // Wait briefly for the interrupt to take effect, then send the clear command
     setTimeout(() => {
-      const clearCommand = platform() === 'win32' ? 'cls\r' : 'clear\r';
+      const clearCommand = isWindows() ? 'cls\r' : 'clear\r';
       if (this.ptyClient && this.sessionId) {
         this.ptyClient.write(this.sessionId, clearCommand);
       }
@@ -2022,7 +2056,7 @@ export class TerminalInstance {
     // Wait briefly for the interrupt to take effect
     setTimeout(() => {
       // Send the clear command to the shell
-      const clearCommand = platform() === 'win32' ? 'cls\r' : 'clear\r';
+      const clearCommand = isWindows() ? 'cls\r' : 'clear\r';
       if (this.ptyClient && this.sessionId) {
         this.ptyClient.write(this.sessionId, clearCommand);
       }

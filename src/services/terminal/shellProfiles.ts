@@ -1,7 +1,8 @@
 import { Platform } from 'obsidian';
-import * as fs from 'fs';
-import * as path from 'path';
 import type { ShellType, TerminalShellType } from '@/settings/settings';
+
+const fs = window.require('fs') as typeof import('fs');
+const path = window.require('path') as typeof import('path');
 
 const WINDOWS_DEFAULT_SHELLS: ShellType[] = ['cmd', 'powershell', 'pwsh', 'gitbash', 'wsl'];
 const UNIX_DEFAULT_SHELLS: ShellType[] = ['bash', 'zsh'];

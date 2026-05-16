@@ -5,9 +5,10 @@
 
 import type { App, ColorComponent, TextComponent } from 'obsidian';
 import { Modal, Setting, Notice, Platform, ToggleComponent, setIcon } from 'obsidian';
-import * as fs from 'fs';
 import type { RendererContext } from '../types';
 import type { BinaryDownloadSource, PresetScript, ShellType } from '../settings';
+
+const fs = window.require('fs') as typeof import('fs');
 import { 
   DEFAULT_PRESET_SCRIPTS,
   DEFAULT_SERVER_CONNECTION_SETTINGS,

@@ -1,9 +1,10 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import type { WorkspaceLeaf, Menu } from 'obsidian';
 import { FileSystemAdapter, ItemView, Notice, TFile, TFolder, setIcon } from 'obsidian';
 import { shell, webUtils } from 'electron';
 import { WebLinksAddon } from '@xterm/addon-web-links';
+
+const fs = window.require('fs') as typeof import('fs');
+const path = window.require('path') as typeof import('path');
 import type { TerminalService } from '../../services/terminal/terminalService';
 import type { TerminalInstance } from '../../services/terminal/terminalInstance';
 import {

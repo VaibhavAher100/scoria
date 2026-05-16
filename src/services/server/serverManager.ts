@@ -9,13 +9,16 @@
  * 
  */
 
-import type { ChildProcess } from 'child_process';
-import { spawn } from 'child_process';
-import * as path from 'path';
-import * as fs from 'fs';
 import { Notice } from 'obsidian';
 import { debugLog, debugWarn, errorLog } from '@/utils/logger';
 import { t } from '@/i18n';
+
+const fs = window.require('fs') as typeof import('fs');
+const path = window.require('path') as typeof import('path');
+const { spawn } = window.require('child_process') as typeof import('child_process');
+
+/** Inline type-only reference to avoid a top-level `import 'child_process'`. */
+type ChildProcess = import('child_process').ChildProcess;
 import type { 
   ServerInfo, 
   ServerEvents,

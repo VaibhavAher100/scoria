@@ -1,6 +1,3 @@
-import * as fs from "fs";
-import * as path from "path";
-import { pathToFileURL } from "url";
 import type {
   App,
   Editor,
@@ -10,6 +7,10 @@ import type {
   WorkspaceLeaf,
 } from "obsidian";
 import { normalizePath } from "obsidian";
+
+const fs = window.require("fs") as typeof import("fs");
+const path = window.require("path") as typeof import("path");
+const { pathToFileURL } = window.require("url") as typeof import("url");
 import {
   buildAgentContextTerminalEnv,
   renderTermyCodexSkill,

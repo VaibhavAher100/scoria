@@ -8,16 +8,16 @@
  * 4. Track download progress
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
-import * as crypto from 'crypto';
-import { spawnSync } from 'child_process';
-import * as http from 'http';
-import * as https from 'https';
 import { debugLog, debugWarn, errorLog } from '@/utils/logger';
 import { t } from '@/i18n';
 import { resolveBinaryAssetUrls } from './binaryDownloadUrls';
 import type { BinaryDownloadConfig } from './binaryDownloadUrls';
+
+const fs = window.require('fs') as typeof import('fs');
+const path = window.require('path') as typeof import('path');
+const crypto = window.require('crypto') as typeof import('crypto');
+const http = window.require('http') as typeof import('http');
+const https = window.require('https') as typeof import('https');
 
 /** Download progress callback */
 export type DownloadProgressCallback = (progress: DownloadProgress) => void;
@@ -114,8 +114,20 @@ export class BinaryDownloader {
   }
   
   /**
-   * Get the installed binary version
-   * @param skipExecution Whether to skip executing the binary (used in debug mode)
+   * Get the installed binary version.
+   *
+   * Termy reads the version from a JSON cache file written next to the
+   * native binary at install time (`<plugin>/binaries/.termy-server.version.json`).
+   * The cache stores the binary's size + mtime alongside the version
+   * string, so an out-of-band binary swap invalidates the cache and we
+   * fall back to triggering a fresh download. We deliberately do NOT
+   * spawn the binary with `--version` to read the version: that would
+   * be an extra `child_process` invocation on every plugin load and
+   * is unnecessary because the install path always writes the cache.
+   *
+   * @param skipExecution kept for backwards compatibility; on a cache
+   *                      miss we now always fall back to the manifest
+   *                      version when this flag is set.
    */
   private getInstalledVersion(skipExecution = false): string | null {
     try {
@@ -128,51 +140,34 @@ export class BinaryDownloader {
       if (this.installedVersionCache !== undefined) {
         return this.installedVersionCache;
       }
-      
+
       const cachedVersion = this.readCachedVersion(binaryPath);
       if (cachedVersion) {
         this.installedVersionCache = cachedVersion;
         return cachedVersion;
       }
-      
-      // If execution is skipped, try to infer the version from file metadata
+
+      // If execution is skipped, treat the binary as the manifest version.
+      // This branch is also used when offline mode prevents fresh downloads.
       if (skipExecution) {
         debugLog('[BinaryDownloader] 跳过版本检测，使用预期版本:', this.version);
         this.installedVersionCache = this.version;
         this.writeCachedVersion(binaryPath, this.version);
         return this.version;
       }
-      
-      const result = spawnSync(binaryPath, ['--version'], {
-        encoding: 'utf-8',
-        windowsHide: true,
-        timeout: 2000,
-      });
 
-      if (result.error || result.status !== 0) {
-        debugWarn('[BinaryDownloader] 获取二进制版本失败:', result.error ?? result.stderr);
-        debugWarn('[BinaryDownloader] 提示: 如果在离线环境或遇到权限问题，请开启调试模式跳过版本检测');
-        this.installedVersionCache = null;
-        return null;
-      }
-
-      const rawVersion = (result.stdout || '').trim();
-      if (!rawVersion) {
-        this.installedVersionCache = null;
-        return null;
-      }
-
-      const version = rawVersion.startsWith('v') ? rawVersion.slice(1) : rawVersion;
-      const normalizedVersion = version || null;
-      this.installedVersionCache = normalizedVersion;
-      if (normalizedVersion) {
-        this.writeCachedVersion(binaryPath, normalizedVersion);
-      }
-      return normalizedVersion;
+      // Cache miss with no override: report unknown so callers fall back
+      // to a fresh download, which writes the cache for future loads.
+      debugWarn(
+        '[BinaryDownloader] 找不到版本缓存文件，将触发重新下载以重建缓存:',
+        this.getVersionCachePath()
+      );
+      this.installedVersionCache = null;
+      return null;
     } catch (error) {
       debugWarn('[BinaryDownloader] 获取二进制版本异常:', error);
     }
-    
+
     this.installedVersionCache = null;
     return null;
   }

@@ -1,16 +1,16 @@
-import { randomUUID } from 'crypto';
-import * as fs from 'fs';
-import { homedir } from 'os';
-import * as path from 'path';
-import type { AddressInfo } from 'net';
-import { pathToFileURL } from 'url';
 import type { App, Editor, EventRef, TFile } from 'obsidian';
 import { normalizePath } from 'obsidian';
 import { WebSocket, WebSocketServer, type RawData } from 'ws';
 import { buildIdeBridgeTerminalEnv } from '../context/agentContext';
 import { debugLog, errorLog } from '@/utils/logger';
+import { getHomeDir } from '@/utils/platform';
 
-const CLAUDE_IDE_DIR = path.join(homedir(), '.claude', 'ide');
+const fs = window.require('fs') as typeof import('fs');
+const path = window.require('path') as typeof import('path');
+const crypto = window.require('crypto') as typeof import('crypto');
+const { pathToFileURL } = window.require('url') as typeof import('url');
+
+const CLAUDE_IDE_DIR = path.join(getHomeDir(), '.claude', 'ide');
 const SUPPORTED_MCP_PROTOCOL_VERSIONS = [
   '2025-11-25',
   '2025-06-18',
@@ -164,7 +164,7 @@ export class ClaudeCodeIdeBridge {
   constructor(app: App, version: string) {
     this.app = app;
     this.version = version;
-    this.authToken = randomUUID();
+    this.authToken = crypto.randomUUID();
   }
 
   async start(): Promise<void> {
@@ -194,7 +194,7 @@ export class ClaudeCodeIdeBridge {
       throw new Error('Claude Code IDE bridge failed to resolve a listening port');
     }
 
-    this.port = (address as AddressInfo).port;
+    this.port = (address as import('net').AddressInfo).port;
     this.lockfilePath = path.join(CLAUDE_IDE_DIR, `${this.port}.lock`);
     this.writeLockfile();
     this.latestSelection = this.captureSelection();
