@@ -294,7 +294,7 @@ export class TerminalInstance {
     const { useObsidianTheme, backgroundColor, foregroundColor } = this.options;
 
     if (useObsidianTheme) {
-      const isDark = document.body.classList.contains('theme-dark');
+      const isDark = activeDocument.body.classList.contains('theme-dark');
       return {
         background: isDark ? '#1e1e1e' : '#ffffff',
         foreground: isDark ? '#cccccc' : '#333333',
@@ -352,9 +352,10 @@ export class TerminalInstance {
     }
 
     const useTransparentBackground = this.shouldUseTransparentTerminalBackground();
+    const transparentColor = 'transparent' as const;
     const syncLayer = (layer: HTMLElement): void => {
       if (useTransparentBackground) {
-        layer.style.backgroundColor = 'transparent';
+        layer.style.backgroundColor = transparentColor;
         return;
       }
 
@@ -482,7 +483,7 @@ export class TerminalInstance {
 
   private checkRendererSupport(renderer: 'canvas' | 'webgl'): boolean {
     try {
-      const canvas = document.createElement('canvas');
+      const canvas = activeDocument.createElement('canvas');
       if (renderer === 'canvas') {
         return !!canvas.getContext('2d');
       }
@@ -969,7 +970,7 @@ export class TerminalInstance {
     const preferredRenderer = this.options.preferredRenderer || 'canvas';
 
     // Load the renderer asynchronously
-    requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
       void this.loadRenderer(preferredRenderer)
         .then(() => {
           this.syncBackgroundLayerStyles();
@@ -1356,7 +1357,7 @@ export class TerminalInstance {
       }
     };
 
-    setTimeout(() => {
+    window.setTimeout(() => {
       menuDocument.addEventListener('click', closeMenu);
       menuDocument.addEventListener('contextmenu', closeMenu);
     }, 0);
@@ -1471,7 +1472,8 @@ export class TerminalInstance {
     item.addEventListener('mouseenter', () => {
       submenu.addClass('is-visible');
       submenu.removeClass('is-flipped');
-      submenu.style.top = '0';
+      const submenuTopReset = '0';
+      submenu.style.top = submenuTopReset;
 
       // Adjust the submenu position
       const rect = submenu.getBoundingClientRect();
@@ -1594,7 +1596,7 @@ export class TerminalInstance {
     this.lastSearchQuery = query;
     
     // Use the current theme colors for search highlighting
-    const isDark = document.body.classList.contains('theme-dark');
+    const isDark = activeDocument.body.classList.contains('theme-dark');
     
     return this.searchAddon.findNext(query, {
       caseSensitive: options?.caseSensitive ?? false,
@@ -2151,7 +2153,7 @@ export class TerminalInstance {
     }
     
     // Wait briefly for the interrupt to take effect, then send the clear command
-    setTimeout(() => {
+    window.setTimeout(() => {
       const clearCommand = isWindows() ? 'cls\r' : 'clear\r';
       if (this.ptyClient && this.sessionId) {
         this.ptyClient.write(this.sessionId, clearCommand);
@@ -2171,7 +2173,7 @@ export class TerminalInstance {
     }
     
     // Wait briefly for the interrupt to take effect
-    setTimeout(() => {
+    window.setTimeout(() => {
       // Send the clear command to the shell
       const clearCommand = isWindows() ? 'cls\r' : 'clear\r';
       if (this.ptyClient && this.sessionId) {

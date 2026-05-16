@@ -21,7 +21,7 @@ import { BaseSettingsRenderer } from './baseRenderer';
 import { t } from '../../i18n';
 import { PresetScriptModal } from '../../ui/terminal/presetScriptModal';
 import { renderPresetScriptIcon } from '../../ui/terminal/presetScriptIcons';
-import { getSelectableShellTypes, isTerminalShellType } from '../../services/terminal/shellProfiles';
+import { getSelectableShellTypes } from '../../services/terminal/shellProfiles';
 import { clamp, normalizeBackgroundPosition, normalizeBackgroundSize, toCssUrl } from '../../utils/styleUtils';
 
 const NEW_INSTANCE_BEHAVIORS = [
@@ -291,7 +291,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           });
         
         // Initial validation
-        setTimeout(() => {
+        window.setTimeout(() => {
           this.validateCustomShellPath(container, currentCustomPath);
         }, 0);
         

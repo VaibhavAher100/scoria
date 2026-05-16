@@ -1,5 +1,5 @@
 import type { App, Editor, EventRef, TFile } from 'obsidian';
-import { normalizePath } from 'obsidian';
+import { FileSystemAdapter, normalizePath } from 'obsidian';
 import { WebSocket, WebSocketServer, type RawData } from 'ws';
 import { buildIdeBridgeTerminalEnv } from '../context/agentContext';
 import { debugLog, errorLog } from '@/utils/logger';
@@ -170,7 +170,7 @@ export class ClaudeCodeIdeBridge {
   private server: WebSocketServer | null = null;
   private port: number | null = null;
   private lockfilePath: string | null = null;
-  private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private pollTimer: number | null = null;
   private latestSelection: SelectionChangedParams | null = null;
   private started = false;
 
@@ -228,7 +228,7 @@ export class ClaudeCodeIdeBridge {
     }
 
     if (this.pollTimer) {
-      clearInterval(this.pollTimer);
+      window.clearInterval(this.pollTimer);
       this.pollTimer = null;
     }
 
@@ -281,7 +281,7 @@ export class ClaudeCodeIdeBridge {
       this.app.workspace.on('editor-change', () => this.refreshSelection()),
     );
 
-    this.pollTimer = setInterval(() => this.refreshSelection(), SELECTION_POLL_INTERVAL_MS);
+    this.pollTimer = window.setInterval(() => this.refreshSelection(), SELECTION_POLL_INTERVAL_MS);
   }
 
   private refreshSelection(): void {
@@ -363,7 +363,7 @@ export class ClaudeCodeIdeBridge {
 
   private getVaultPath(): string | null {
     const adapter = this.app.vault.adapter;
-    if ('getBasePath' in adapter && typeof adapter.getBasePath === 'function') {
+    if (adapter instanceof FileSystemAdapter) {
       return normalizePath(adapter.getBasePath());
     }
 

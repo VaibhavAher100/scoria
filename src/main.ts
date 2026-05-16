@@ -351,7 +351,7 @@ export default class TerminalPlugin extends Plugin {
    * Load settings
    */
   async loadSettings() {
-    const loaded = await this.loadData();
+    const loaded = (await this.loadData()) as Partial<TerminalSettings> | null;
     const normalizedPresetScripts = this.normalizePresetScripts(loaded?.presetScripts);
     this.settings = {
       ...DEFAULT_TERMINAL_SETTINGS,
@@ -484,7 +484,7 @@ export default class TerminalPlugin extends Plugin {
     // Create the SVG icon and label
     const iconEl = createTermyLogoSvg(18);
     iconEl.addClass('terminal-status-bar-icon');
-    const labelEl = document.createElement('span');
+    const labelEl = activeDocument.createElement('span');
     labelEl.addClass('terminal-status-bar-label');
     labelEl.textContent = 'Termy';
     this._statusBarItem.append(iconEl, labelEl);
@@ -692,7 +692,7 @@ export default class TerminalPlugin extends Plugin {
 
   private getLeafForRestoredTerminal(): WorkspaceLeaf {
     const { workspace } = this.app;
-    const previousActiveLeaf = workspace.activeLeaf;
+    const previousActiveLeaf = workspace.getMostRecentLeaf();
     const rootLeaf = workspace.getMostRecentLeaf(workspace.rootSplit);
     if (rootLeaf) {
       workspace.setActiveLeaf(rootLeaf, { focus: false });
@@ -733,10 +733,10 @@ export default class TerminalPlugin extends Plugin {
   }
 
   private updateAlwaysOnTopTabBadges(): void {
-    this.removeAlwaysOnTopTabBadges(document);
+    this.removeAlwaysOnTopTabBadges(activeDocument);
     for (const leaf of this.app.workspace.getLeavesOfType(TERMINAL_VIEW_TYPE)) {
       const leafDocument = leaf.view?.containerEl?.ownerDocument;
-      if (leafDocument && leafDocument !== document) {
+      if (leafDocument && leafDocument !== activeDocument) {
         this.removeAlwaysOnTopTabBadges(leafDocument);
       }
     }
@@ -1416,7 +1416,7 @@ export default class TerminalPlugin extends Plugin {
                        this.settings.visibility.showInNewTab;
     
     // Find all empty views
-    const emptyViews = document.querySelectorAll('.workspace-leaf-content[data-type="empty"] .view-content');
+    const emptyViews = activeDocument.querySelectorAll('.workspace-leaf-content[data-type="empty"] .view-content');
     
     emptyViews.forEach((emptyView) => {
       const existingButton = emptyView.querySelector('.terminal-plugin-terminal-action');
@@ -1441,7 +1441,7 @@ export default class TerminalPlugin extends Plugin {
       }
 
       // Create the "Open terminal" button
-      const terminalAction = document.createElement('div');
+      const terminalAction = activeDocument.createElement('div');
       terminalAction.className = 'empty-state-action terminal-plugin-terminal-action';
       terminalAction.textContent = t('commands.openTerminal');
       terminalAction.addEventListener('click', () => {
@@ -1606,7 +1606,7 @@ export default class TerminalPlugin extends Plugin {
 
   private mountPresetScriptsMenu(menu: HTMLElement): void {
     this.closePresetScriptsMenu();
-    document.body.appendChild(menu);
+    activeDocument.body.appendChild(menu);
     this._presetScriptsMenuEl = menu;
 
     const onOutsideClick = (event: MouseEvent) => {
@@ -1619,11 +1619,11 @@ export default class TerminalPlugin extends Plugin {
         this.closePresetScriptsMenu();
       }
     };
-    document.addEventListener('mousedown', onOutsideClick, true);
-    document.addEventListener('keydown', onKeydown, true);
+    activeDocument.addEventListener('mousedown', onOutsideClick, true);
+    activeDocument.addEventListener('keydown', onKeydown, true);
     this._presetScriptsMenuCleanup = () => {
-      document.removeEventListener('mousedown', onOutsideClick, true);
-      document.removeEventListener('keydown', onKeydown, true);
+      activeDocument.removeEventListener('mousedown', onOutsideClick, true);
+      activeDocument.removeEventListener('keydown', onKeydown, true);
     };
   }
 
@@ -1643,31 +1643,31 @@ export default class TerminalPlugin extends Plugin {
   private buildPresetScriptsMenu(): HTMLElement | null {
     const scripts = (this.settings.presetScripts ?? []);
     const visibleScripts = scripts.filter(script => script.showInStatusBar ?? true);
-    const menu = document.createElement('div');
+    const menu = activeDocument.createElement('div');
     menu.className = 'preset-scripts-menu';
     menu.setAttribute('role', 'menu');
 
-    const listEl = document.createElement('div');
+    const listEl = activeDocument.createElement('div');
     listEl.className = 'preset-scripts-menu-list';
     listEl.setAttribute('role', 'none');
 
     if (visibleScripts.length === 0) {
-      const empty = document.createElement('div');
+      const empty = activeDocument.createElement('div');
       empty.className = 'preset-scripts-menu-item is-disabled';
       empty.textContent = t('settingsDetails.terminal.presetScriptsEmpty');
       listEl.appendChild(empty);
     }
 
     visibleScripts.forEach((script) => {
-      const item = document.createElement('div');
+      const item = activeDocument.createElement('div');
       item.className = 'preset-scripts-menu-item';
       item.setAttribute('role', 'menuitem');
 
-      const iconEl = document.createElement('div');
+      const iconEl = activeDocument.createElement('div');
       iconEl.className = 'preset-scripts-menu-icon';
       renderPresetScriptIcon(iconEl, script.icon || 'terminal');
 
-      const labelEl = document.createElement('div');
+      const labelEl = activeDocument.createElement('div');
       labelEl.className = 'preset-scripts-menu-label';
       labelEl.textContent = script.name || t('settingsDetails.terminal.presetScriptsUnnamed');
 
@@ -1686,10 +1686,10 @@ export default class TerminalPlugin extends Plugin {
 
     menu.appendChild(listEl);
 
-    const footerEl = document.createElement('div');
+    const footerEl = activeDocument.createElement('div');
     footerEl.className = 'preset-scripts-menu-footer';
 
-    const addItem = document.createElement('div');
+    const addItem = activeDocument.createElement('div');
     addItem.className = 'preset-scripts-menu-item preset-scripts-menu-add';
     addItem.setAttribute('role', 'menuitem');
     addItem.textContent = `+ ${t('settingsDetails.terminal.presetScriptsAddMenu')}`;

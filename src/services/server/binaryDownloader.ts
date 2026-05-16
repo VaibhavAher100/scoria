@@ -537,7 +537,7 @@ export class BinaryDownloader {
   }
 
   private async delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
   }
 
   private safeUnlink(filePath: string): void {
@@ -590,8 +590,8 @@ export class BinaryDownloader {
           }
 
           let data = '';
-          response.on('data', (chunk) => {
-            data += chunk.toString();
+          response.on('data', (chunk: Buffer | string) => {
+            data += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
           });
 
           response.on('end', () => {

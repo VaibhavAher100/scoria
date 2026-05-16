@@ -49,7 +49,7 @@ export class PtyClient extends ModuleClient {
       this.pendingInitId = tempId;
       
       // Set timeout
-      const timeout = setTimeout(() => {
+      const timeout = window.setTimeout(() => {
         this.initResolvers.delete(tempId);
         if (this.pendingInitId === tempId) {
           this.pendingInitId = null;
@@ -59,7 +59,7 @@ export class PtyClient extends ModuleClient {
       
       // Wrap resolvers so the timeout is cleared
       const wrappedResolve = (sessionId: string) => {
-        clearTimeout(timeout);
+        window.clearTimeout(timeout);
         this.initResolvers.delete(tempId);
         if (this.pendingInitId === tempId) {
           this.pendingInitId = null;
@@ -68,7 +68,7 @@ export class PtyClient extends ModuleClient {
       };
       
       const wrappedReject = (error: Error) => {
-        clearTimeout(timeout);
+        window.clearTimeout(timeout);
         this.initResolvers.delete(tempId);
         if (this.pendingInitId === tempId) {
           this.pendingInitId = null;

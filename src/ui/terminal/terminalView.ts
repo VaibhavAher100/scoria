@@ -153,7 +153,7 @@ export class TerminalView extends ItemView {
       this.removeDropHandlers = this.setupDropHandlers();
     }
 
-    setTimeout(() => {
+    window.setTimeout(() => {
       if (!this.terminalInstance && this.terminalContainer) {
         void this.initializeTerminal();
       }
@@ -168,7 +168,7 @@ export class TerminalView extends ItemView {
     if (!this.searchContainer) return;
 
     // Search input
-    this.searchInput = document.createElement('input');
+    this.searchInput = activeDocument.createElement('input');
     this.searchInput.type = 'text';
     this.searchInput.placeholder = t('terminal.search.placeholder');
     this.searchInput.className = 'terminal-search-input';
@@ -216,7 +216,7 @@ export class TerminalView extends ItemView {
    * Create a search button
    */
   private createSearchButton(icon: string, title: string, onClick: () => void): HTMLElement {
-    const btn = document.createElement('button');
+    const btn = activeDocument.createElement('button');
     btn.className = 'terminal-search-btn clickable-icon';
     btn.title = title;
     setIcon(btn, icon);
@@ -1101,7 +1101,7 @@ export class TerminalView extends ItemView {
       return;
     }
 
-    setTimeout(() => {
+    window.setTimeout(() => {
       if (this.terminalInstance?.isAlive()) {
         this.terminalInstance.fit();
         if (options.focus !== false) {
@@ -1115,13 +1115,13 @@ export class TerminalView extends ItemView {
     if (!this.terminalContainer) return;
     this.resizeObserver?.disconnect();
 
-    let resizeTimeout: NodeJS.Timeout | null = null;
+    let resizeTimeout: number | null = null;
     const ResizeObserverCtor = this.terminalContainer.ownerDocument.defaultView?.ResizeObserver ?? ResizeObserver;
 
     this.resizeObserver = new ResizeObserverCtor((entries) => {
-      if (resizeTimeout) clearTimeout(resizeTimeout);
+      if (resizeTimeout) window.clearTimeout(resizeTimeout);
 
-      resizeTimeout = setTimeout(() => {
+      resizeTimeout = window.setTimeout(() => {
         if (this.terminalInstance?.isAlive()) {
           const { width, height } = entries[0].contentRect;
           if (width > 0 && height > 0) {
@@ -1171,7 +1171,7 @@ export class TerminalView extends ItemView {
     const existingLayer = this.terminalContainer.querySelector('.terminal-background-image');
     if (existingLayer) return;
 
-    const bgLayer = document.createElement('div');
+    const bgLayer = activeDocument.createElement('div');
     bgLayer.className = 'terminal-background-image';
     this.terminalContainer.prepend(bgLayer);
   }
@@ -1222,7 +1222,7 @@ export class TerminalView extends ItemView {
     }
 
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error(t('terminal.notInitialized'))), timeoutMs);
+      window.setTimeout(() => reject(new Error(t('terminal.notInitialized'))), timeoutMs);
     });
 
     return Promise.race([this.initPromise, timeoutPromise]);

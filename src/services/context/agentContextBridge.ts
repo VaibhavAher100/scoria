@@ -86,8 +86,8 @@ export class AgentContextBridge {
   private readonly pathToFileURL: UrlModule["pathToFileURL"];
 
   private lastSerializedSnapshotState = "";
-  private pollTimer: ReturnType<typeof setInterval> | null = null;
-  private refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private pollTimer: number | null = null;
+  private refreshTimer: number | null = null;
   private started = false;
 
   constructor(app: App, pluginDir: string) {
@@ -121,7 +121,7 @@ export class AgentContextBridge {
       ),
     );
 
-    this.pollTimer = setInterval(
+    this.pollTimer = window.setInterval(
       () => this.refreshSnapshot(),
       POLL_INTERVAL_MS,
     );
@@ -138,12 +138,12 @@ export class AgentContextBridge {
     }
 
     if (this.pollTimer) {
-      clearInterval(this.pollTimer);
+      window.clearInterval(this.pollTimer);
       this.pollTimer = null;
     }
 
     if (this.refreshTimer) {
-      clearTimeout(this.refreshTimer);
+      window.clearTimeout(this.refreshTimer);
       this.refreshTimer = null;
     }
 
@@ -165,10 +165,10 @@ export class AgentContextBridge {
 
   private scheduleRefreshSnapshot(): void {
     if (this.refreshTimer) {
-      clearTimeout(this.refreshTimer);
+      window.clearTimeout(this.refreshTimer);
     }
 
-    this.refreshTimer = setTimeout(() => {
+    this.refreshTimer = window.setTimeout(() => {
       this.refreshTimer = null;
       this.refreshSnapshot();
     }, REFRESH_DEBOUNCE_MS);

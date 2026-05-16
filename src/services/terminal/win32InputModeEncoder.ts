@@ -332,7 +332,7 @@ function normalizeCode(event: Win32InputModeKeyboardEventLike): string | undefin
 }
 
 function getModifierState(event: Win32InputModeKeyboardEventLike, key: string): boolean {
-  return event.getModifierState?.call(event, key) ?? false;
+  return event.getModifierState?.(key) ?? false;
 }
 
 function resolveVirtualKeyCode(event: Win32InputModeKeyboardEventLike, code: string | undefined): number | null {

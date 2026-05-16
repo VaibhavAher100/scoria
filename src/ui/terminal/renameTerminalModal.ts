@@ -81,7 +81,7 @@ export class RenameTerminalModal extends Modal {
     confirmBtn.addEventListener('click', () => this.submit());
 
     // Auto-focus and select the text
-    setTimeout(() => {
+    window.setTimeout(() => {
       this.inputEl?.focus();
       this.inputEl?.select();
     }, 10);

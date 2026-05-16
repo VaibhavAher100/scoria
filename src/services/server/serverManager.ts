@@ -113,7 +113,7 @@ export class ServerManager {
   private isReconnecting = false;
   
   /** Reconnect timer */
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectTimer: number | null = null;
   
   /** Server startup Promise */
   private serverStartPromise: Promise<void> | null = null;
@@ -239,7 +239,7 @@ export class ServerManager {
         
         // Wait for the process to exit
         await new Promise<void>((resolve) => {
-          const timeout = setTimeout(() => {
+          const timeout = window.setTimeout(() => {
             if (this.process && !this.process.killed) {
               debugWarn('[ServerManager] 强制终止服务器');
               this.process.kill('SIGKILL');
@@ -249,7 +249,7 @@ export class ServerManager {
 
           if (this.process) {
             this.process.once('exit', () => {
-              clearTimeout(timeout);
+              window.clearTimeout(timeout);
               resolve();
             });
           }
@@ -500,7 +500,7 @@ export class ServerManager {
       if (shouldRestart) {
         this.resetShutdownState();
         if (updateSucceeded) {
-          setTimeout(() => {
+          window.setTimeout(() => {
             this.ensureServer().catch((error) => {
               errorLog('[ServerManager] 更新后重启服务器失败:', error);
             });
@@ -546,7 +546,7 @@ export class ServerManager {
 
       let buffer = '';
       
-      const timeout = setTimeout(() => {
+      const timeout = window.setTimeout(() => {
         this.process?.stdout?.off('data', onData);
         reject(new ServerManagerError(
           ServerErrorCode.SERVER_START_FAILED,
@@ -560,9 +560,9 @@ export class ServerManager {
         try {
           const match = buffer.match(/\{[^}]+\}/);
           if (match) {
-            const info: ServerInfo = JSON.parse(match[0]);
+            const info = JSON.parse(match[0]) as ServerInfo;
             if (info.port && typeof info.port === 'number') {
-              clearTimeout(timeout);
+              window.clearTimeout(timeout);
               this.process?.stdout?.off('data', onData);
               debugLog('[ServerManager] 解析到服务器信息:', info);
               resolve(info.port);
@@ -581,7 +581,7 @@ export class ServerManager {
       });
 
       this.process.on('exit', (code) => {
-        clearTimeout(timeout);
+        window.clearTimeout(timeout);
         if (code !== 0 && code !== null) {
           reject(new ServerManagerError(
             ServerErrorCode.SERVER_START_FAILED,
@@ -616,7 +616,7 @@ export class ServerManager {
       this.ws = new WebSocket(wsUrl);
       const ws = this.ws;
       
-      const timeout = setTimeout(() => {
+      const timeout = window.setTimeout(() => {
         if (this.ws === ws) {
           this.wsConnectPromise = null;
         }
@@ -627,7 +627,7 @@ export class ServerManager {
       }, 5000);
 
       ws.onopen = () => {
-        clearTimeout(timeout);
+        window.clearTimeout(timeout);
         debugLog('[ServerManager] WebSocket 已连接');
         
         // Reset the reconnect counter
@@ -665,7 +665,7 @@ export class ServerManager {
       };
 
       ws.onerror = (event) => {
-        clearTimeout(timeout);
+        window.clearTimeout(timeout);
         errorLog('[ServerManager] WebSocket 错误:', event);
         // Do not reject here; let onclose handle it
       };
@@ -710,7 +710,7 @@ export class ServerManager {
     
     // Handle JSON messages
     try {
-      const msg: ServerMessage = JSON.parse(event.data);
+      const msg = JSON.parse(event.data as string) as ServerMessage;
       
       // Dispatch messages by module
       switch (msg.module) {
@@ -766,7 +766,7 @@ export class ServerManager {
     
     this.emit('ws-reconnecting', this.wsReconnectAttempts, delay);
     
-    this.reconnectTimer = setTimeout(() => {
+    this.reconnectTimer = window.setTimeout(() => {
       this.reconnectTimer = null;
       void this.attemptReconnect();
     }, delay);
@@ -806,7 +806,7 @@ export class ServerManager {
    */
   private cancelReconnect(): void {
     if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
+      window.clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
     this.isReconnecting = false;
@@ -870,7 +870,7 @@ export class ServerManager {
       
       const delay = 1000 * Math.pow(2, this.restartAttempts - 1);
       
-      setTimeout(() => {
+      window.setTimeout(() => {
         this.ensureServer()
           .then(() => {
             debugLog('[ServerManager] 服务器自动重启成功');

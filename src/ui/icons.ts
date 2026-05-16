@@ -7,7 +7,7 @@ function createSvgElement<K extends keyof SVGElementTagNameMap>(
   tag: K,
   attrs: Record<string, string>
 ): SVGElementTagNameMap[K] {
-  const el = document.createElementNS(SVG_NS, tag);
+  const el = activeDocument.createElementNS(SVG_NS, tag);
   Object.entries(attrs).forEach(([key, value]) => {
     el.setAttribute(key, value);
   });

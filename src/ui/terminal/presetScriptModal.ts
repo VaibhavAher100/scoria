@@ -113,7 +113,7 @@ export class PresetScriptModal extends Modal {
     this.renderToggles(formEl);
     this.renderButtons(contentEl);
 
-    setTimeout(() => {
+    window.setTimeout(() => {
       this.nameInput?.focus();
       this.nameInput?.select();
     }, 10);
@@ -549,7 +549,7 @@ export class PresetScriptModal extends Modal {
 
     suggestionPanel.addEventListener('mouseleave', () => {
       pointerInsidePanel = false;
-      if (document.activeElement !== valueInput) {
+      if (activeDocument.activeElement !== valueInput) {
         closeSuggestionPanel();
       }
     });
@@ -734,7 +734,7 @@ export class PresetScriptModal extends Modal {
         this.closeIconPicker();
       }
     };
-    document.addEventListener('click', this.outsideClickHandler);
+    activeDocument.addEventListener('click', this.outsideClickHandler);
   }
 
   private updateIconPickerSelection(): void {
@@ -830,7 +830,7 @@ export class PresetScriptModal extends Modal {
     this.actionsContainer = null;
     this.obsidianCommandOptions = [];
     if (this.outsideClickHandler) {
-      document.removeEventListener('click', this.outsideClickHandler);
+      activeDocument.removeEventListener('click', this.outsideClickHandler);
       this.outsideClickHandler = null;
     }
   }

@@ -227,13 +227,13 @@ export function isCustomPresetScriptIcon(iconName: string): boolean {
 }
 
 function createOpenCodeSvg(variant: keyof typeof OPENCODE_ICON_PATHS): SVGSVGElement {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  const svg = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '0 0 240 300');
   svg.setAttribute('aria-hidden', 'true');
   svg.classList.add('preset-script-theme-svg', `preset-script-theme-svg-${variant}`);
 
   for (const { d, fill } of OPENCODE_ICON_PATHS[variant]) {
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    const path = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('fill', fill);
     path.setAttribute('d', d);
     svg.appendChild(path);
@@ -251,12 +251,12 @@ function createGeminiSvg(): SVGSVGElement {
   const parsed = new DOMParser().parseFromString(markup.trim(), 'image/svg+xml');
   const svg = parsed.documentElement;
 
-  if (!(svg instanceof SVGSVGElement)) {
+  if (!(svg.instanceOf(SVGSVGElement))) {
     throw new Error('Failed to parse Gemini SVG asset');
   }
 
   svg.setAttribute('aria-hidden', 'true');
-  return document.importNode(svg, true);
+  return activeDocument.importNode(svg, true);
 }
 
 export function renderPresetScriptIcon(el: HTMLElement, iconName: string): void {
@@ -306,11 +306,11 @@ export function renderPresetScriptIcon(el: HTMLElement, iconName: string): void 
       el.style.setProperty('--preset-script-icon-color', color);
     }
 
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    const svg = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', '0 0 24 24');
     svg.setAttribute('aria-hidden', 'true');
 
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    const path = activeDocument.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('fill', 'currentColor');
     path.setAttribute('d', icon.path);
     svg.appendChild(path);

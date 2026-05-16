@@ -3,6 +3,7 @@
  * Manages language resources and provides translation functions
  */
 
+import { getLanguage } from 'obsidian';
 import { en } from './locales/en';
 import { zhCN } from './locales/zh-CN';
 import { ja } from './locales/ja';
@@ -28,11 +29,11 @@ class I18nService {
   }
 
   /**
-   * Detect Obsidian's current language setting
-   * Read the 'language' key from localStorage
+   * Detect Obsidian's current language setting via the official
+   * `getLanguage()` API. Falls back to 'en' for unsupported locales.
    */
   private detectLocale(): SupportedLocale {
-    const lang = window.localStorage.getItem('language');
+    const lang = getLanguage();
     // zh, zh-CN, and zh-TW all use Chinese
     if (lang && (lang === 'zh' || lang.startsWith('zh-'))) {
       return 'zh-CN';
@@ -52,7 +53,7 @@ class I18nService {
   }
 
   private isSupportedLocale(locale: string): locale is SupportedLocale {
-    return Object.prototype.hasOwnProperty.call(this.resources, locale);
+    return Object.hasOwn(this.resources, locale);
   }
 
   /**
@@ -97,7 +98,7 @@ class I18nService {
    * @returns The interpolated string
    */
   private interpolate(template: string, params: Record<string, string | number>): string {
-    return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
+    return template.replace(/\{\{(\w+)\}\}/g, (_match: string, key: string) => {
       return String(params[key] ?? `{{${key}}}`);
     });
   }
