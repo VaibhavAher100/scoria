@@ -67,6 +67,7 @@ type TerminalInstanceLike = {
 type TerminalViewLike = {
   refreshAppearance?: () => void;
   getTerminalInstance?: () => TerminalInstanceLike | null;
+  realView?: unknown;
 };
 
 const asTerminalViewLike = (value: unknown): TerminalViewLike | null => {
@@ -74,6 +75,7 @@ const asTerminalViewLike = (value: unknown): TerminalViewLike | null => {
   const candidate = value as TerminalViewLike;
   if (typeof candidate.refreshAppearance === 'function') return candidate;
   if (typeof candidate.getTerminalInstance === 'function') return candidate;
+  if (candidate.realView && candidate.realView !== value) return asTerminalViewLike(candidate.realView);
   return null;
 };
 
@@ -952,8 +954,9 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         .setValue(this.context.plugin.settings.fontSize)
         .setDynamicTooltip()
         .onChange((value) => {
-          this.context.plugin.settings.fontSize = value;
-          void this.saveSettings();
+          void this.updateAppearanceSetting(() => {
+            this.context.plugin.settings.fontSize = value;
+          });
         }));
 
     // Font family
@@ -964,8 +967,9 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         .setPlaceholder(t('settingsDetails.terminal.fontFamilyPlaceholder'))
         .setValue(this.context.plugin.settings.fontFamily)
         .onChange((value) => {
-          this.context.plugin.settings.fontFamily = value;
-          void this.saveSettings();
+          void this.updateAppearanceSetting(() => {
+            this.context.plugin.settings.fontFamily = value;
+          });
         }));
 
     // Cursor style
@@ -980,8 +984,9 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         dropdown.setValue(this.context.plugin.settings.cursorStyle);
         dropdown.onChange((value) => {
           if (!isCursorStyle(value)) return;
-          this.context.plugin.settings.cursorStyle = value;
-          void this.saveSettings();
+          void this.updateAppearanceSetting(() => {
+            this.context.plugin.settings.cursorStyle = value;
+          });
         });
       });
 
@@ -992,8 +997,9 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       .addToggle(toggle => toggle
         .setValue(this.context.plugin.settings.cursorBlink)
         .onChange((value) => {
-          this.context.plugin.settings.cursorBlink = value;
-          void this.saveSettings();
+          void this.updateAppearanceSetting(() => {
+            this.context.plugin.settings.cursorBlink = value;
+          });
         }));
 
     // Renderer type
@@ -1088,6 +1094,12 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
     await this.saveSettings();
     this.updateThemePreview();
     this.updateRendererStatus();
+    this.requestThemeRefresh();
+  }
+
+  private async updateAppearanceSetting(update: () => void): Promise<void> {
+    update();
+    await this.saveSettings();
     this.requestThemeRefresh();
   }
 

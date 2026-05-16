@@ -1132,6 +1132,10 @@ export class TerminalView extends ItemView {
     const settings = plugin.settings;
 
     this.terminalInstance.updateOptions({
+      fontSize: settings.fontSize,
+      fontFamily: settings.fontFamily,
+      cursorStyle: settings.cursorStyle,
+      cursorBlink: settings.cursorBlink,
       useObsidianTheme: settings.useObsidianTheme,
       backgroundColor: settings.backgroundColor,
       foregroundColor: settings.foregroundColor,

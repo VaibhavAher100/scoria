@@ -1,7 +1,7 @@
 import esbuild from "esbuild";
 import process from "process";
 import path from "path";
-import builtins from "builtin-modules";
+import { builtinModules } from "node:module";
 import compress from "esbuild-compress";
 
 const banner =
@@ -22,6 +22,10 @@ const wsNodeEntryPlugin = {
 };
 
 const prod = (process.argv[2] === 'production');
+const nodeBuiltins = [
+	...builtinModules,
+	...builtinModules.map((moduleName) => `node:${moduleName}`),
+];
 
 const context = await esbuild.context({
 	banner: {
@@ -38,7 +42,7 @@ const context = await esbuild.context({
 		'electron',
 		'@codemirror/*',
 		'@lezer/*',
-		...builtins
+		...nodeBuiltins
 	],
 	format: 'cjs',
 	target: 'es2021',

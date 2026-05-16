@@ -47,6 +47,16 @@ type WebglAddon = import('@xterm/addon-webgl').WebglAddon;
 type IMarker = import('@xterm/xterm').IMarker;
 type IDisposable = import('@xterm/xterm').IDisposable;
 
+const XTERM_BACKGROUND_LAYER_SELECTOR = [
+  '.xterm',
+  '.xterm-viewport',
+  '.xterm-scrollable-element',
+  '.xterm-screen',
+  '.xterm-canvas',
+  'canvas',
+].join(', ');
+const XTERM_SCROLL_BACKGROUND_LAYER_SELECTOR = '.xterm-viewport, .xterm-scrollable-element';
+
 // xterm.js module cache
 let xtermModules: {
   Terminal: typeof import('@xterm/xterm').Terminal;
@@ -244,7 +254,7 @@ export class TerminalInstance {
         fontFamily: this.options.fontFamily ?? 'Consolas, "Courier New", monospace',
         theme: this.getTheme(),
         scrollback: this.options.scrollback ?? 1000,
-        allowTransparency: !!this.options.backgroundImage,
+        allowTransparency: this.shouldUseTransparentTerminalBackground(),
         convertEol: false,
         rightClickSelectsWord: true,
         macOptionClickForcesSelection: true,
@@ -281,7 +291,7 @@ export class TerminalInstance {
   }
 
   private getTheme() {
-    const { useObsidianTheme, backgroundColor, foregroundColor, backgroundImage } = this.options;
+    const { useObsidianTheme, backgroundColor, foregroundColor } = this.options;
 
     if (useObsidianTheme) {
       const isDark = document.body.classList.contains('theme-dark');
@@ -294,7 +304,9 @@ export class TerminalInstance {
       };
     }
 
-    const bgColor = backgroundImage ? 'transparent' : (backgroundColor || '#000000');
+    const bgColor = this.shouldUseTransparentTerminalBackground()
+      ? 'transparent'
+      : (backgroundColor || '#000000');
     const isDark = backgroundColor ? this.isColorDark(backgroundColor) : true;
     
     return {
@@ -314,6 +326,53 @@ export class TerminalInstance {
     return (r * 299 + g * 587 + b * 114) / 1000 < 128;
   }
 
+  private shouldForceCanvasRenderer(renderer: 'canvas' | 'webgl'): boolean {
+    return renderer === 'webgl'
+      && !this.options.useObsidianTheme
+      && !!this.options.backgroundImage;
+  }
+
+  private getResolvedRenderer(renderer: 'canvas' | 'webgl'): 'canvas' | 'webgl' {
+    return this.shouldForceCanvasRenderer(renderer) ? 'canvas' : renderer;
+  }
+
+  private shouldUseTransparentTerminalBackground(): boolean {
+    if (!this.options.backgroundImage || this.options.useObsidianTheme) {
+      return false;
+    }
+
+    const preferredRenderer = this.options.preferredRenderer || 'canvas';
+    return this.getResolvedRenderer(preferredRenderer) !== 'webgl';
+  }
+
+  private syncBackgroundLayerStyles(themeBackground = this.getTheme().background): void {
+    const terminalElement = this.xterm?.element;
+    if (!terminalElement) {
+      return;
+    }
+
+    const useTransparentBackground = this.shouldUseTransparentTerminalBackground();
+    const syncLayer = (layer: HTMLElement): void => {
+      if (useTransparentBackground) {
+        layer.style.backgroundColor = 'transparent';
+        return;
+      }
+
+      if (layer.style.backgroundColor !== 'transparent') {
+        return;
+      }
+
+      if (layer.matches(XTERM_SCROLL_BACKGROUND_LAYER_SELECTOR)) {
+        layer.style.backgroundColor = themeBackground;
+      } else {
+        layer.style.removeProperty('background-color');
+      }
+    };
+
+    syncLayer(terminalElement);
+    terminalElement.querySelectorAll<HTMLElement>(XTERM_BACKGROUND_LAYER_SELECTOR).forEach(syncLayer);
+  }
+
   private disposeRenderer(): void {
     if (this.renderer) {
       try { this.renderer.dispose(); } catch { /* ignore */ }
@@ -325,6 +384,67 @@ export class TerminalInstance {
   private async loadRenderer(renderer: 'canvas' | 'webgl'): Promise<void> {
     const resolvedRenderer = this.resolveRenderer(renderer);
     await this.loadRendererInternal(resolvedRenderer);
+  }
+
+  private refreshRenderer(): void {
+    if (!this.containerEl) {
+      return;
+    }
+
+    const resolvedRenderer = this.getResolvedRenderer(this.options.preferredRenderer || 'canvas');
+    if (this.rendererType === resolvedRenderer) {
+      return;
+    }
+
+    void this.loadRenderer(resolvedRenderer)
+      .then(() => {
+        this.updateTheme();
+        this.syncBackgroundLayerStyles();
+        this.fit();
+      })
+      .catch((error) => {
+        errorLog('[Terminal] Renderer refresh failed:', error);
+      });
+  }
+
+  private reopenTerminalElement(): void {
+    const container = this.containerEl;
+    if (!container) {
+      return;
+    }
+
+    const activeElement = container.ownerDocument.activeElement;
+    const wasFocused = activeElement instanceof Node
+      && !!this.xterm.element?.contains(activeElement);
+
+    this.disposeRenderer();
+    this.disposeDomEventHandlers();
+    this.xterm.element?.remove();
+
+    try {
+      if (this.xterm.element) {
+        container.appendChild(this.xterm.element);
+      }
+      this.xterm.open(container);
+      this.setupDomEventHandlers(container);
+      this.syncBackgroundLayerStyles();
+    } catch (error) {
+      errorLog('[Terminal] xterm.open() failed during appearance refresh:', error);
+      return;
+    }
+
+    void this.loadRenderer(this.options.preferredRenderer || 'canvas')
+      .then(() => {
+        this.updateTheme();
+        this.syncBackgroundLayerStyles();
+        this.fit();
+        if (wasFocused) {
+          this.focus();
+        }
+      })
+      .catch((error) => {
+        errorLog('[Terminal] Renderer refresh failed after terminal reopen:', error);
+      });
   }
 
   private async loadRendererInternal(renderer: 'canvas' | 'webgl'): Promise<void> {
@@ -837,6 +957,7 @@ export class TerminalInstance {
         container.appendChild(this.xterm.element);
       }
       this.xterm.open(container);
+      this.syncBackgroundLayerStyles();
     } catch (error) {
       errorLog('[Terminal] xterm.open() failed:', error);
       throw error;
@@ -851,6 +972,7 @@ export class TerminalInstance {
     requestAnimationFrame(() => {
       void this.loadRenderer(preferredRenderer)
         .then(() => {
+          this.syncBackgroundLayerStyles();
           this.fit();
         })
         .catch((error) => {
@@ -861,15 +983,10 @@ export class TerminalInstance {
   }
 
   private resolveRenderer(renderer: 'canvas' | 'webgl'): 'canvas' | 'webgl' {
-    if (
-      renderer === 'webgl'
-      && !this.options.useObsidianTheme
-      && this.options.backgroundImage
-    ) {
+    if (this.shouldForceCanvasRenderer(renderer)) {
       debugLog('[Terminal] Background image enabled, fallback to canvas renderer');
-      return 'canvas';
     }
-    return renderer;
+    return this.getResolvedRenderer(renderer);
   }
 
   /**
@@ -1934,7 +2051,7 @@ export class TerminalInstance {
   getSearchAddon(): SearchAddon { return this.searchAddon; }
 
   getCurrentRenderer(): 'canvas' | 'webgl' {
-    return this.rendererType ?? 'canvas';
+    return this.getResolvedRenderer(this.rendererType ?? this.options.preferredRenderer ?? 'canvas');
   }
 
   /**
@@ -2071,20 +2188,44 @@ export class TerminalInstance {
   }
 
   updateTheme(): void {
-    this.xterm.options.theme = this.getTheme();
-    this.xterm.options.allowTransparency = !!this.options.backgroundImage;
+    const theme = this.getTheme();
+    this.xterm.options.theme = theme;
+    this.xterm.options.allowTransparency = this.shouldUseTransparentTerminalBackground();
+    this.syncBackgroundLayerStyles(theme.background);
     this.xterm.refresh(0, this.xterm.rows - 1);
   }
 
   updateOptions(options: Partial<TerminalOptions>): void {
     const previousScrollback = this.options.scrollback;
+    const previousRenderer = this.getResolvedRenderer(this.options.preferredRenderer || 'canvas');
+    const previousTransparentBackground = this.shouldUseTransparentTerminalBackground();
     this.options = { ...this.options, ...options };
     if (!this.isInitialized) {
       return;
     }
+    const nextTransparentBackground = this.shouldUseTransparentTerminalBackground();
     if (options.scrollback !== undefined && options.scrollback !== previousScrollback) {
       this.xterm.options.scrollback = options.scrollback;
     }
+    if (options.fontSize !== undefined) {
+      this.setFontSize(options.fontSize);
+    }
+    if (options.fontFamily !== undefined) {
+      this.xterm.options.fontFamily = options.fontFamily;
+      this.fit();
+    }
+    if (options.cursorStyle !== undefined) {
+      this.xterm.options.cursorStyle = options.cursorStyle;
+    }
+    if (options.cursorBlink !== undefined) {
+      this.xterm.options.cursorBlink = options.cursorBlink;
+    }
     this.updateTheme();
+    const nextRenderer = this.getResolvedRenderer(this.options.preferredRenderer || 'canvas');
+    if (nextTransparentBackground !== previousTransparentBackground) {
+      this.reopenTerminalElement();
+    } else if (nextRenderer !== previousRenderer) {
+      this.refreshRenderer();
+    }
   }
 }
