@@ -7,37 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.4.0] - 2026-05-16
 
+### Added
+- Mapped each Termy version to the minimum Obsidian version it supports so the in-app updater only offers builds that match your installation.
+
 ### Changed
-- Bumped `minAppVersion` to `1.8.7` to match the Obsidian APIs Termy currently relies on, and refreshed the plugin description to align the repository `manifest.json` with the release artifact.
-- Refreshed the build toolchain: `@types/node` 20 → 24 (matches Node 22 on CI / Node 24 locally), `esbuild` 0.27 → 0.28, `typescript-eslint` 8.59.0 → 8.59.3, `globals` 17.5 → 17.6, `ws` 8.20.0 → 8.20.1, and pinned `packageManager` to `pnpm@10.33.4`. TypeScript stays on 5.9, ESLint stays on 9 (capped by `eslint-plugin-obsidianmd@0.3.0`'s `@eslint/js: ^9.30.1` peer), and `simple-icons` stays on 15.x because v16 removed the OpenAI icon Termy imports in `presetScriptIcons.ts`.
-- Bumped the GitHub Actions runtime to the Node 24 generation in `release.yml`, `ci.yml`, and `build-rust.yml`: `actions/upload-artifact@v4` → `@v7`, `actions/download-artifact@v4` → `@v7`, `pnpm/action-setup@v4` → `@v5`, and `softprops/action-gh-release@v2` → `@v3`. CI Node version aligned to `22` so the plugin and release jobs run on matching runtimes. Replaced the deprecated `NodeRequire` global type alias in `src/main.ts` with `NodeJS.Require` to satisfy the newer typings.
+- Raised the minimum Obsidian version to 1.8.7 and refreshed the plugin description to match what Termy actually does today.
+- Tuned terminal appearance handling so font, theme, and renderer changes apply to every open terminal the moment you save settings, and custom background colors and images now show through reliably across the canvas, WebGL, and DOM renderers.
+- Reworked home-directory resolution so paths like `~/Documents` expand correctly on every platform, including profiles where the usual environment variables are not set.
 
 ## [1.3.7] - 2026-05-16
 
+### Added
+- Added a terminal context-menu action for switching the default shell straight from an open terminal.
+
+### Changed
+- Refreshed the README version badges and the project positioning copy.
+
 ### Fixed
-- Fixed the cmd "open in file manager" action pointing at the parent directory after `cd <subdir>`. The streaming prompt parser was unreliable under Windows conpty, which rewrites the screen with cursor-positioning escape sequences instead of emitting full prompt strings. Termy now also reads the prompt straight off the xterm.js screen at the cursor position when the streaming parser misses it, which works for cmd, PowerShell, Git Bash, and WSL alike. Streaming parsers were also tightened to trust the latest prompt in a chunk and to ignore stray `>` characters from command output (`echo foo > bar`). New regression tests live in `src/services/terminal/promptCwdParsers.test.ts`.
+- Fixed the "open in file manager" action opening the parent folder after `cd <subdir>`, so cmd, PowerShell, Git Bash, and WSL terminals now open the actual current folder.
+- Fixed always-on-top terminals: the pinned window now stays scoped to its own terminal, new terminals open with the normal layout, and the pinned session can be returned to the main window without restarting.
+- Fixed missing lock indicators on always-on-top terminal tabs and in the terminal right-click menu.
+- Fixed Claude Code terminal titles being lost after a session, and cleared stale Claude Code drag references between sessions.
+- Fixed terminal context menus drifting off-screen near the edge of the pane.
+- Fixed missing translations on terminal notices, and corrected the Windows shell label to `CMD`.
+- Fixed preset workflow pins not staying put, and reduced reconnect churn while the plugin reinstalls in development vaults.
 
 ### Removed
-- Removed the programmatic plugin self-disable/re-enable flow used by the settings reload button and the dev-install auto-reload watcher. Reloading Termy after `pnpm install:dev` now requires a manual reload from Obsidian's plugin settings, in line with the Obsidian developer policy that disallows silent plugin reloads.
-- Removed all `import 'os'` usage from the plugin source. Platform detection and home-directory resolution now go through `src/utils/platform.ts` (`process.platform`, `process.env.HOME` / `process.env.USERPROFILE`) so the plugin no longer triggers Obsidian's "system identity information" community-review warning.
-
-### Changed
-- Switched every Node built-in module access (`fs`, `path`, `child_process`, `crypto`, `http`, `https`, `url`) from static ES `import` to Electron's renderer-side `window.require(...)` with `typeof import('...')` type annotations. Runtime behavior is unchanged but the static import surface is no longer flagged by Obsidian's community-review scanner. A new `src/types/global.d.ts` declares the `Window.require` typing.
-- Narrowed the `child_process` runtime surface to a single call site. Removed the `spawnSync(binary, ['--version'])` probe in the binary downloader (the version is now read from the local cache file written at install time, with a fresh-download fallback) and replaced the `exec('explorer / open / xdg-open')` "open cwd in file manager" action with `shell.openPath`. The only remaining `child_process` call is `serverManager.spawn(termy-server, ['--port', '0'])`, which starts the native PTY backend.
-
-### Added
-- Added a terminal context menu action for switching the default shell directly from an open terminal.
-
-### Changed
-- Refreshed the README version badges and positioning copy for the current Termy feature set.
-
-### Fixed
-- Fixed always-on-top terminal windows so the pinned terminal stays scoped to that terminal, new terminals open through the normal layout rules, and the pinned session can be restored to the main window without restarting.
-- Fixed always-on-top terminal tab and context-menu indicators, including visible lock icons in the terminal right-click menu.
-- Fixed Claude Code terminal title restoration and reset stale Claude Code drag-reference state between sessions.
-- Fixed terminal context-menu placement so menus stay inside the visible viewport.
-- Fixed missing terminal notice translations and corrected the Windows `cmd` shell label to `CMD`.
-- Fixed preset workflow action pinning and reduced install-time reconnect churn during development reloads.
+- Removed the automatic plugin disable / re-enable used by the settings reload button and the development install watcher. Reloading Termy now goes through Obsidian's normal plugin settings, in line with Obsidian's developer policy.
 
 ## [1.3.6] - 2026-05-14
 
