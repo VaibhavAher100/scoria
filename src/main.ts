@@ -854,12 +854,12 @@ export default class TerminalPlugin extends Plugin {
     return null;
   }
 
-  private getWindowRequire(targetWindow: Window): NodeRequire | null {
-    const candidate = targetWindow as Window & { require?: NodeRequire };
+  private getWindowRequire(targetWindow: Window): NodeJS.Require | null {
+    const candidate = targetWindow as Window & { require?: NodeJS.Require };
     return typeof candidate.require === 'function' ? candidate.require : null;
   }
 
-  private getCurrentRequire(): NodeRequire | null {
+  private getCurrentRequire(): NodeJS.Require | null {
     try {
       return require;
     } catch {
@@ -867,7 +867,7 @@ export default class TerminalPlugin extends Plugin {
     }
   }
 
-  private getBrowserWindowFromRequire(runtimeRequire: NodeRequire): ElectronBrowserWindowLike | null {
+  private getBrowserWindowFromRequire(runtimeRequire: NodeJS.Require): ElectronBrowserWindowLike | null {
     const electron = this.getElectronRuntime(runtimeRequire);
     const browserWindow = electron.remote?.getCurrentWindow?.() ?? null;
     if (browserWindow) return browserWindow;
@@ -876,7 +876,7 @@ export default class TerminalPlugin extends Plugin {
     return electronRemote.getCurrentWindow?.() ?? null;
   }
 
-  private getElectronRuntime(runtimeRequire: NodeRequire): ElectronRuntime {
+  private getElectronRuntime(runtimeRequire: NodeJS.Require): ElectronRuntime {
     try {
       return runtimeRequire('electron') as ElectronRuntime;
     } catch {
@@ -884,7 +884,7 @@ export default class TerminalPlugin extends Plugin {
     }
   }
 
-  private getElectronRemoteRuntime(runtimeRequire: NodeRequire): ElectronRemoteRuntime {
+  private getElectronRemoteRuntime(runtimeRequire: NodeJS.Require): ElectronRemoteRuntime {
     try {
       return runtimeRequire('@electron/remote') as ElectronRemoteRuntime;
     } catch {

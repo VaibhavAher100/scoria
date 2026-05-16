@@ -80,7 +80,7 @@ jobs:
           cp "rust-servers/target/${{ matrix.target }}/release/termy-server${{ matrix.ext }}" "binaries/${BINARY_NAME}"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: termy-server-${{ matrix.platform }}-${{ matrix.arch }}
           path: binaries/termy-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}
@@ -110,7 +110,7 @@ jobs:
 
     steps:
       - name: Download artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: termy-server-${{ matrix.platform }}-${{ matrix.arch }}
           path: binaries

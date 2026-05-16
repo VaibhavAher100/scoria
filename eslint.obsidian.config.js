@@ -69,7 +69,6 @@ export default [
       globals: {
         ...globals.browser,
         ...globals.node,
-        NodeRequire: 'readonly',
       },
     },
     rules: {

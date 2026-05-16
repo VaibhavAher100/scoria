@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Bumped `minAppVersion` to `1.8.7` to match the Obsidian APIs Termy currently relies on, and refreshed the plugin description to align the repository `manifest.json` with the release artifact.
+- Refreshed the build toolchain: `@types/node` 20 → 24 (matches Node 22 on CI / Node 24 locally), `esbuild` 0.27 → 0.28, `typescript-eslint` 8.59.0 → 8.59.3, `globals` 17.5 → 17.6, `ws` 8.20.0 → 8.20.1, and pinned `packageManager` to `pnpm@10.33.4`. TypeScript stays on 5.9, ESLint stays on 9 (capped by `eslint-plugin-obsidianmd@0.3.0`'s `@eslint/js: ^9.30.1` peer), and `simple-icons` stays on 15.x because v16 removed the OpenAI icon Termy imports in `presetScriptIcons.ts`.
+- Bumped the GitHub Actions runtime to the Node 24 generation in `release.yml`, `ci.yml`, and `build-rust.yml`: `actions/upload-artifact@v4` → `@v7`, `actions/download-artifact@v4` → `@v7`, `pnpm/action-setup@v4` → `@v5`, and `softprops/action-gh-release@v2` → `@v3`. CI Node version aligned to `22` so the plugin and release jobs run on matching runtimes. Replaced the deprecated `NodeRequire` global type alias in `src/main.ts` with `NodeJS.Require` to satisfy the newer typings.
 
 ## [1.3.7] - 2026-05-16
 

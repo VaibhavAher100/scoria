@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Terminal emulator with split panes, reusable workflows, AI CLI context handoff, and zero setup. Powered by xterm.js and a bundled Rust PTY backend.",
   "main": "main.js",
-  "packageManager": "pnpm@10.0.0",
+  "packageManager": "pnpm@10.33.4",
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "lint": "eslint \"src/**/*.ts\"",
@@ -36,18 +36,18 @@
   "author": "ZyphrZero",
   "license": "GPL-3.0",
   "devDependencies": {
-    "@eslint/js": "^9.39.2",
-    "@types/node": "^20.12.12",
-    "esbuild": "^0.27.2",
+    "@eslint/js": "^9.39.4",
+    "@types/node": "^24.0.0",
+    "esbuild": "^0.28.0",
     "esbuild-compress": "^2.0.2",
-    "eslint": "^9.39.2",
+    "eslint": "^9.39.4",
     "eslint-plugin-obsidianmd": "0.3.0",
-    "globals": "^17.0.0",
+    "globals": "^17.6.0",
     "obsidian": "^1.11.0",
     "tslib": "2.8.1",
     "typescript": "5.9.3",
-    "typescript-eslint": "^8.51.0",
-    "ws": "^8.18.3"
+    "typescript-eslint": "^8.59.3",
+    "ws": "^8.20.1"
   },
   "dependencies": {
     "@xterm/addon-canvas": "^0.7.0",
@@ -61,6 +61,9 @@
   "pnpm": {
     "overrides": {
       "fast-uri": "3.1.2"
-    }
+    },
+    "ignoredBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }
