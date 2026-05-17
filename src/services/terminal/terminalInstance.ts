@@ -145,6 +145,8 @@ export interface TerminalOptions {
 export type SearchStateCallback = (visible: boolean) => void;
 /** Font size change callback */
 export type FontSizeChangeCallback = (fontSize: number) => void;
+/** Renderer change callback */
+export type RendererChangeCallback = (renderer: 'canvas' | 'webgl') => void;
 
 interface TerminalCommandMarker {
   marker: IMarker;
@@ -190,6 +192,9 @@ export class TerminalInstance {
   private fontSizeChangeCallbacks: Set<FontSizeChangeCallback> = new Set();
   private readonly minFontSize = 8;
   private readonly maxFontSize = 32;
+
+  // Renderer change listeners
+  private rendererChangeCallbacks: Set<RendererChangeCallback> = new Set();
 
   // Input batching
   private pendingInput: string[] = [];
@@ -296,12 +301,17 @@ export class TerminalInstance {
 
     if (useObsidianTheme) {
       const isDark = activeDocument.body.classList.contains('theme-dark');
+      const computed = activeDocument.defaultView?.getComputedStyle(activeDocument.body);
+      const bgFromVar = computed?.getPropertyValue('--background-primary').trim();
+      const fgFromVar = computed?.getPropertyValue('--text-normal').trim();
+      const cursorFromVar = computed?.getPropertyValue('--text-normal').trim();
+      const selectionFromVar = computed?.getPropertyValue('--text-selection').trim();
       return {
-        background: isDark ? '#1e1e1e' : '#ffffff',
-        foreground: isDark ? '#cccccc' : '#333333',
-        cursor: isDark ? '#ffffff' : '#000000',
-        cursorAccent: isDark ? '#000000' : '#ffffff',
-        selectionBackground: isDark ? '#264f78' : '#add6ff',
+        background: bgFromVar || (isDark ? '#1e1e1e' : '#ffffff'),
+        foreground: fgFromVar || (isDark ? '#cccccc' : '#333333'),
+        cursor: cursorFromVar || (isDark ? '#ffffff' : '#000000'),
+        cursorAccent: bgFromVar || (isDark ? '#000000' : '#ffffff'),
+        selectionBackground: selectionFromVar || (isDark ? '#264f78' : '#add6ff'),
       };
     }
 
@@ -327,23 +337,16 @@ export class TerminalInstance {
     return (r * 299 + g * 587 + b * 114) / 1000 < 128;
   }
 
-  private shouldForceCanvasRenderer(renderer: 'canvas' | 'webgl'): boolean {
-    return renderer === 'webgl'
-      && !this.options.useObsidianTheme
-      && !!this.options.backgroundImage;
-  }
-
-  private getResolvedRenderer(renderer: 'canvas' | 'webgl'): 'canvas' | 'webgl' {
-    return this.shouldForceCanvasRenderer(renderer) ? 'canvas' : renderer;
-  }
-
   private shouldUseTransparentTerminalBackground(): boolean {
     if (!this.options.backgroundImage || this.options.useObsidianTheme) {
       return false;
     }
 
+    // WebGL renderer cannot show a CSS background image behind the canvas
+    // reliably, so the background image is silently ignored in WebGL mode and
+    // the configured backgroundColor stays in effect.
     const preferredRenderer = this.options.preferredRenderer || 'canvas';
-    return this.getResolvedRenderer(preferredRenderer) !== 'webgl';
+    return preferredRenderer !== 'webgl';
   }
 
   private syncBackgroundLayerStyles(themeBackground = this.getTheme().background): void {
@@ -360,10 +363,11 @@ export class TerminalInstance {
         return;
       }
 
-      if (layer.style.backgroundColor !== 'transparent') {
-        return;
-      }
-
+      // Always re-sync to the active theme so previously applied colors
+      // (e.g. an old custom backgroundColor) do not leak through after
+      // switching themes or appearance options. Without this, the .xterm
+      // root element retains its previous inline background and shows up
+      // as a frame around the cell-aligned scrollable area.
       if (layer.matches(XTERM_SCROLL_BACKGROUND_LAYER_SELECTOR)) {
         layer.style.backgroundColor = themeBackground;
       } else {
@@ -384,8 +388,7 @@ export class TerminalInstance {
   }
 
   private async loadRenderer(renderer: 'canvas' | 'webgl'): Promise<void> {
-    const resolvedRenderer = this.resolveRenderer(renderer);
-    await this.loadRendererInternal(resolvedRenderer);
+    await this.loadRendererInternal(renderer);
   }
 
   private refreshRenderer(): void {
@@ -393,7 +396,7 @@ export class TerminalInstance {
       return;
     }
 
-    const resolvedRenderer = this.getResolvedRenderer(this.options.preferredRenderer || 'canvas');
+    const resolvedRenderer = this.options.preferredRenderer || 'canvas';
     if (this.rendererType === resolvedRenderer) {
       return;
     }
@@ -456,6 +459,7 @@ export class TerminalInstance {
 
     const { CanvasAddon, WebglAddon } = await loadXtermModules();
 
+    const previousRenderer = this.rendererType;
     this.disposeRenderer();
 
     try {
@@ -464,6 +468,9 @@ export class TerminalInstance {
         this.xterm.loadAddon(canvasAddon);
         this.renderer = canvasAddon;
         this.rendererType = 'canvas';
+        if (previousRenderer !== this.rendererType) {
+          this.notifyRendererChanged();
+        }
         return;
       }
 
@@ -475,11 +482,26 @@ export class TerminalInstance {
       this.xterm.loadAddon(webglAddon);
       this.renderer = webglAddon;
       this.rendererType = 'webgl';
+      if (previousRenderer !== this.rendererType) {
+        this.notifyRendererChanged();
+      }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       errorLog(`[Terminal] ${renderer} renderer failed:`, error);
       throw new Error(t('terminalInstance.rendererLoadFailed', { renderer: renderer.toUpperCase(), message: errorMsg }));
     }
+  }
+
+  private notifyRendererChanged(): void {
+    if (!this.rendererType) return;
+    const renderer = this.rendererType;
+    this.rendererChangeCallbacks.forEach((callback) => {
+      try {
+        callback(renderer);
+      } catch (error) {
+        errorLog('[Terminal] Renderer change callback failed:', error);
+      }
+    });
   }
 
   private checkRendererSupport(renderer: 'canvas' | 'webgl'): boolean {
@@ -982,13 +1004,6 @@ export class TerminalInstance {
           this.xterm.write(`\r\n\x1b[1;31m[渲染器错误] ${errorMsg}\x1b[0m\r\n`);
         });
     });
-  }
-
-  private resolveRenderer(renderer: 'canvas' | 'webgl'): 'canvas' | 'webgl' {
-    if (this.shouldForceCanvasRenderer(renderer)) {
-      debugLog('[Terminal] Background image enabled, fallback to canvas renderer');
-    }
-    return this.getResolvedRenderer(renderer);
   }
 
   /**
@@ -2063,12 +2078,34 @@ export class TerminalInstance {
     };
   }
 
+  /**
+   * Listen for renderer changes (canvas <-> webgl).
+   * The callback fires after the renderer addon has actually been swapped in,
+   * so callers should treat the value as authoritative rather than guessing.
+   */
+  onRendererChange(callback: RendererChangeCallback): () => void {
+    this.rendererChangeCallbacks.add(callback);
+    return () => {
+      this.rendererChangeCallbacks.delete(callback);
+    };
+  }
+
   getXterm(): Terminal { return this.xterm; }
   getFitAddon(): FitAddon { return this.fitAddon; }
   getSearchAddon(): SearchAddon { return this.searchAddon; }
 
   getCurrentRenderer(): 'canvas' | 'webgl' {
-    return this.getResolvedRenderer(this.rendererType ?? this.options.preferredRenderer ?? 'canvas');
+    return this.rendererType ?? this.options.preferredRenderer ?? 'canvas';
+  }
+
+  /**
+   * Return the effective background color used by the active xterm theme.
+   * Callers (e.g. the view layer) can paint surrounding container layers
+   * with the same value to avoid the cell-aligned scrollable area exposing
+   * a frame of a different color.
+   */
+  getEffectiveBackgroundColor(): string {
+    return this.getTheme().background;
   }
 
   /**
@@ -2214,7 +2251,7 @@ export class TerminalInstance {
 
   updateOptions(options: Partial<TerminalOptions>): void {
     const previousScrollback = this.options.scrollback;
-    const previousRenderer = this.getResolvedRenderer(this.options.preferredRenderer || 'canvas');
+    const previousRenderer = this.options.preferredRenderer || 'canvas';
     const previousTransparentBackground = this.shouldUseTransparentTerminalBackground();
     this.options = { ...this.options, ...options };
     if (!this.isInitialized) {
@@ -2238,7 +2275,7 @@ export class TerminalInstance {
       this.xterm.options.cursorBlink = options.cursorBlink;
     }
     this.updateTheme();
-    const nextRenderer = this.getResolvedRenderer(this.options.preferredRenderer || 'canvas');
+    const nextRenderer = this.options.preferredRenderer || 'canvas';
     if (nextTransparentBackground !== previousTransparentBackground) {
       this.reopenTerminalElement();
     } else if (nextRenderer !== previousRenderer) {

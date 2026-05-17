@@ -223,6 +223,9 @@ export interface TranslationKeys {
       focusNewInstanceDesc: string;
       lockNewInstance: string;
       lockNewInstanceDesc: string;
+      displaySettings: string;
+      displayTabTheme: string;
+      displayTabAppearance: string;
       themeSettings: string;
       themePreview: string;
       rendererStatus: string;

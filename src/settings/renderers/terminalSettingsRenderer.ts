@@ -61,6 +61,7 @@ type TerminalInstanceLike = {
   updateOptions: (options: { scrollback?: number }) => void;
   isAlive?: () => boolean;
   getCurrentRenderer?: () => 'canvas' | 'webgl';
+  onRendererChange?: (callback: (renderer: 'canvas' | 'webgl') => void) => () => void;
 };
 
 type TerminalViewLike = {
@@ -159,7 +160,10 @@ function validateShellPath(path: string): boolean {
 export class TerminalSettingsRenderer extends BaseSettingsRenderer {
   private themePreviewEl: HTMLElement | null = null;
   private themePreviewContentEl: HTMLElement | null = null;
+  private themePreviewCursorEl: HTMLElement | null = null;
   private rendererStatusEl: HTMLElement | null = null;
+  private displayActiveTab: 'theme' | 'appearance' = 'theme';
+  private rendererChangeUnsubscribers: Array<() => void> = [];
   private readonly builtInPresetIds = new Set(['claude-code', 'codex', 'opencode']);
 
   /**
@@ -167,6 +171,8 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
    * @param context Renderer context
    */
   render(context: RendererContext): void {
+    // Tear down any subscriptions from a previous render before rebuilding the DOM.
+    this.disposeRendererChangeSubscriptions();
     this.context = context;
     const containerEl = context.containerEl;
 
@@ -179,11 +185,8 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
     // Preset scripts settings card
     this.renderPresetScriptsSettings(containerEl);
 
-    // Theme settings card
-    this.renderThemeSettings(containerEl);
-
-    // Appearance settings card
-    this.renderAppearanceSettings(containerEl);
+    // Display settings card (unified theme + appearance)
+    this.renderDisplaySettings(containerEl);
 
     // Behavior settings card
     this.renderBehaviorSettings(containerEl);
@@ -367,20 +370,66 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
   }
 
   /**
-   * Render theme settings
+   * Render unified display settings (preview + theme/appearance tabs)
    */
-  private renderThemeSettings(containerEl: HTMLElement): void {
-    const themeCard = containerEl.createDiv({ cls: 'settings-card' });
+  private renderDisplaySettings(containerEl: HTMLElement): void {
+    const displayCard = containerEl.createDiv({ cls: 'settings-card' });
 
-    new Setting(themeCard)
-      .setName(t('settingsDetails.terminal.themeSettings'))
+    new Setting(displayCard)
+      .setName(t('settingsDetails.terminal.displaySettings'))
       .setHeading();
 
-    this.renderThemePreview(themeCard);
-    this.renderRendererStatus(themeCard);
+    // Persistent preview area (always visible regardless of active tab)
+    this.renderThemePreview(displayCard);
 
+    // Tab switcher
+    const tabBar = displayCard.createDiv({ cls: 'terminal-display-tabs' });
+    const themeTabBtn = tabBar.createEl('button', {
+      cls: 'terminal-display-tab',
+      text: t('settingsDetails.terminal.displayTabTheme'),
+    });
+    const appearanceTabBtn = tabBar.createEl('button', {
+      cls: 'terminal-display-tab',
+      text: t('settingsDetails.terminal.displayTabAppearance'),
+    });
+
+    // Tab content container
+    const tabContent = displayCard.createDiv({ cls: 'terminal-display-tab-content' });
+
+    const renderActiveTab = (): void => {
+      tabContent.empty();
+      themeTabBtn.toggleClass('is-active', this.displayActiveTab === 'theme');
+      appearanceTabBtn.toggleClass('is-active', this.displayActiveTab === 'appearance');
+      themeTabBtn.setAttribute('aria-pressed', String(this.displayActiveTab === 'theme'));
+      appearanceTabBtn.setAttribute('aria-pressed', String(this.displayActiveTab === 'appearance'));
+
+      if (this.displayActiveTab === 'theme') {
+        this.renderThemeTabContent(tabContent);
+      } else {
+        this.renderAppearanceTabContent(tabContent);
+      }
+    };
+
+    themeTabBtn.addEventListener('click', () => {
+      if (this.displayActiveTab === 'theme') return;
+      this.displayActiveTab = 'theme';
+      renderActiveTab();
+    });
+    appearanceTabBtn.addEventListener('click', () => {
+      if (this.displayActiveTab === 'appearance') return;
+      this.displayActiveTab = 'appearance';
+      renderActiveTab();
+    });
+
+    renderActiveTab();
+  }
+
+  /**
+   * Render theme tab content (Obsidian theme toggle + custom color settings)
+   */
+  private renderThemeTabContent(container: HTMLElement): void {
     // Use the Obsidian theme
-    const useObsidianThemeSetting = new Setting(themeCard)
+    const useObsidianThemeSetting = new Setting(container)
       .setName(t('settingsDetails.terminal.useObsidianTheme'))
       .setDesc(t('settingsDetails.terminal.useObsidianThemeDesc'))
       .addToggle(toggle => toggle
@@ -389,11 +438,93 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           void this.updateThemeSetting(() => {
             this.context.plugin.settings.useObsidianTheme = value;
           }).then(() => {
-            this.updateCustomColorSettingsVisibility(themeCard, useObsidianThemeSetting.settingEl);
+            this.updateCustomColorSettingsVisibility(container, useObsidianThemeSetting.settingEl);
           });
         }));
 
-    this.updateCustomColorSettingsVisibility(themeCard, useObsidianThemeSetting.settingEl);
+    this.updateCustomColorSettingsVisibility(container, useObsidianThemeSetting.settingEl);
+  }
+
+  /**
+   * Render appearance tab content (font + cursor + renderer)
+   */
+  private renderAppearanceTabContent(container: HTMLElement): void {
+    // Font size
+    new Setting(container)
+      .setName(t('settingsDetails.terminal.fontSize'))
+      .setDesc(t('settingsDetails.terminal.fontSizeDesc'))
+      .addSlider(slider => slider
+        .setLimits(8, 24, 1)
+        .setValue(this.context.plugin.settings.fontSize)
+        .setDynamicTooltip()
+        .onChange((value) => {
+          void this.updateAppearanceSetting(() => {
+            this.context.plugin.settings.fontSize = value;
+          });
+        }));
+
+    // Font family
+    new Setting(container)
+      .setName(t('settingsDetails.terminal.fontFamily'))
+      .setDesc(t('settingsDetails.terminal.fontFamilyDesc'))
+      .addText(text => text
+        .setPlaceholder(t('settingsDetails.terminal.fontFamilyPlaceholder'))
+        .setValue(this.context.plugin.settings.fontFamily)
+        .onChange((value) => {
+          void this.updateAppearanceSetting(() => {
+            this.context.plugin.settings.fontFamily = value;
+          });
+        }));
+
+    // Cursor style
+    new Setting(container)
+      .setName(t('settingsDetails.terminal.cursorStyle'))
+      .setDesc(t('settingsDetails.terminal.cursorStyleDesc'))
+      .addDropdown(dropdown => {
+        dropdown.addOption('block', t('cursorStyleOptions.block'));
+        dropdown.addOption('underline', t('cursorStyleOptions.underline'));
+        dropdown.addOption('bar', t('cursorStyleOptions.bar'));
+
+        dropdown.setValue(this.context.plugin.settings.cursorStyle);
+        dropdown.onChange((value) => {
+          if (!isCursorStyle(value)) return;
+          void this.updateAppearanceSetting(() => {
+            this.context.plugin.settings.cursorStyle = value;
+          });
+        });
+      });
+
+    // Cursor blink
+    new Setting(container)
+      .setName(t('settingsDetails.terminal.cursorBlink'))
+      .setDesc(t('settingsDetails.terminal.cursorBlinkDesc'))
+      .addToggle(toggle => toggle
+        .setValue(this.context.plugin.settings.cursorBlink)
+        .onChange((value) => {
+          void this.updateAppearanceSetting(() => {
+            this.context.plugin.settings.cursorBlink = value;
+          });
+        }));
+
+    // Renderer type
+    new Setting(container)
+      .setName(t('settingsDetails.terminal.rendererType'))
+      .setDesc(t('settingsDetails.terminal.rendererTypeDesc'))
+      .addDropdown(dropdown => dropdown
+        .addOption('canvas', t('rendererOptions.canvas'))
+        .addOption('webgl', t('rendererOptions.webgl'))
+        .setValue(this.context.plugin.settings.preferredRenderer)
+        .onChange((value) => {
+          if (!isPreferredRenderer(value)) {
+            return;
+          }
+          void this.updateThemeSetting(() => {
+            this.context.plugin.settings.preferredRenderer = value;
+          }).then(() => {
+            this.updateBackgroundImageSettingsVisibility();
+            new Notice(t('notices.settings.rendererUpdated'));
+          });
+        }));
   }
 
   /**
@@ -785,7 +916,7 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           });
         }));
 
-    // Background image settings (WebGL mode will automatically fall back to Canvas)
+    // Background image settings (WebGL mode silently ignores the background image)
     this.renderBackgroundImageSettings(container);
   }
 
@@ -998,94 +1129,6 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
   }
 
   /**
-   * Render appearance settings
-   */
-  private renderAppearanceSettings(containerEl: HTMLElement): void {
-    const appearanceCard = containerEl.createDiv({ cls: 'settings-card' });
-
-    new Setting(appearanceCard)
-      .setName(t('settingsDetails.terminal.appearanceSettings'))
-      .setHeading();
-
-    // Font size
-    new Setting(appearanceCard)
-      .setName(t('settingsDetails.terminal.fontSize'))
-      .setDesc(t('settingsDetails.terminal.fontSizeDesc'))
-      .addSlider(slider => slider
-        .setLimits(8, 24, 1)
-        .setValue(this.context.plugin.settings.fontSize)
-        .setDynamicTooltip()
-        .onChange((value) => {
-          void this.updateAppearanceSetting(() => {
-            this.context.plugin.settings.fontSize = value;
-          });
-        }));
-
-    // Font family
-    new Setting(appearanceCard)
-      .setName(t('settingsDetails.terminal.fontFamily'))
-      .setDesc(t('settingsDetails.terminal.fontFamilyDesc'))
-      .addText(text => text
-        .setPlaceholder(t('settingsDetails.terminal.fontFamilyPlaceholder'))
-        .setValue(this.context.plugin.settings.fontFamily)
-        .onChange((value) => {
-          void this.updateAppearanceSetting(() => {
-            this.context.plugin.settings.fontFamily = value;
-          });
-        }));
-
-    // Cursor style
-    new Setting(appearanceCard)
-      .setName(t('settingsDetails.terminal.cursorStyle'))
-      .setDesc(t('settingsDetails.terminal.cursorStyleDesc'))
-      .addDropdown(dropdown => {
-        dropdown.addOption('block', t('cursorStyleOptions.block'));
-        dropdown.addOption('underline', t('cursorStyleOptions.underline'));
-        dropdown.addOption('bar', t('cursorStyleOptions.bar'));
-
-        dropdown.setValue(this.context.plugin.settings.cursorStyle);
-        dropdown.onChange((value) => {
-          if (!isCursorStyle(value)) return;
-          void this.updateAppearanceSetting(() => {
-            this.context.plugin.settings.cursorStyle = value;
-          });
-        });
-      });
-
-    // Cursor blink
-    new Setting(appearanceCard)
-      .setName(t('settingsDetails.terminal.cursorBlink'))
-      .setDesc(t('settingsDetails.terminal.cursorBlinkDesc'))
-      .addToggle(toggle => toggle
-        .setValue(this.context.plugin.settings.cursorBlink)
-        .onChange((value) => {
-          void this.updateAppearanceSetting(() => {
-            this.context.plugin.settings.cursorBlink = value;
-          });
-        }));
-
-    // Renderer type
-    new Setting(appearanceCard)
-      .setName(t('settingsDetails.terminal.rendererType'))
-      .setDesc(t('settingsDetails.terminal.rendererTypeDesc'))
-      .addDropdown(dropdown => dropdown
-        .addOption('canvas', t('rendererOptions.canvas'))
-        .addOption('webgl', t('rendererOptions.webgl'))
-        .setValue(this.context.plugin.settings.preferredRenderer)
-        .onChange((value) => {
-          if (!isPreferredRenderer(value)) {
-            return;
-          }
-          void this.updateThemeSetting(() => {
-            this.context.plugin.settings.preferredRenderer = value;
-          }).then(() => {
-            this.updateBackgroundImageSettingsVisibility();
-            new Notice(t('notices.settings.rendererUpdated'));
-          });
-        }));
-  }
-
-  /**
    * Update background image settings visibility
    * Only takes effect after custom theme settings have been rendered
    */
@@ -1155,13 +1198,13 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
     update();
     await this.saveSettings();
     this.updateThemePreview();
-    this.updateRendererStatus();
     this.requestThemeRefresh();
   }
 
   private async updateAppearanceSetting(update: () => void): Promise<void> {
     update();
     await this.saveSettings();
+    this.updateThemePreview();
     this.requestThemeRefresh();
   }
 
@@ -1174,34 +1217,61 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
 
     this.themePreviewEl = previewSection.createDiv({ cls: 'terminal-theme-preview' });
     this.themePreviewEl.createDiv({ cls: 'terminal-theme-preview-bg' });
+
+    // Renderer badge in the top-right corner of the preview
+    this.rendererStatusEl = this.themePreviewEl.createDiv({ cls: 'terminal-theme-preview-renderer-badge' });
+
     this.themePreviewContentEl = this.themePreviewEl.createDiv({ cls: 'terminal-theme-preview-content' });
 
     this.themePreviewContentEl.createDiv({ text: '$ echo "Termy"' });
     this.themePreviewContentEl.createDiv({ text: 'Termy' });
     this.themePreviewContentEl.createDiv({ text: '$ ls' });
     this.themePreviewContentEl.createDiv({ text: 'README.md  scripts  src  package.json' });
-    this.themePreviewContentEl.createDiv({ text: '$' });
+    const promptLine = this.themePreviewContentEl.createDiv({ cls: 'terminal-theme-preview-prompt-line' });
+    promptLine.createSpan({ text: '$ ' });
+    this.themePreviewCursorEl = promptLine.createSpan({ cls: 'terminal-theme-preview-cursor' });
 
     this.updateThemePreview();
+    this.subscribeToRendererChanges();
+    this.refreshRendererBadge();
   }
 
-  private renderRendererStatus(container: HTMLElement): void {
-    const setting = new Setting(container)
-      .setName(t('settingsDetails.terminal.rendererStatus'))
-      .setDesc(t('settingsDetails.terminal.rendererStatusDesc'));
-
-    this.rendererStatusEl = setting.controlEl.createDiv({ cls: 'terminal-renderer-status-value' });
-    this.updateRendererStatus();
+  private disposeRendererChangeSubscriptions(): void {
+    for (const unsubscribe of this.rendererChangeUnsubscribers) {
+      try {
+        unsubscribe();
+      } catch {
+        // ignore
+      }
+    }
+    this.rendererChangeUnsubscribers = [];
   }
 
-  private updateRendererStatus(): void {
+  /**
+   * Subscribe to renderer-change events on every alive terminal instance so the
+   * badge reflects the actual addon swap (not a synchronous prediction made
+   * before xterm finishes loading the new renderer).
+   */
+  private subscribeToRendererChanges(): void {
+    const leaves = this.context.app.workspace.getLeavesOfType('terminal-view');
+    for (const leaf of leaves) {
+      const view = asTerminalViewLike(leaf.view);
+      const instance = view?.getTerminalInstance?.() ?? null;
+      if (!instance?.isAlive?.() || !instance.onRendererChange) continue;
+      const unsubscribe = instance.onRendererChange(() => {
+        this.refreshRendererBadge();
+      });
+      this.rendererChangeUnsubscribers.push(unsubscribe);
+    }
+  }
+
+  /**
+   * Render the renderer badge. Prefers the live renderer reported by an open
+   * terminal instance; falls back to the configured `preferredRenderer` when
+   * no terminal is alive so the badge stays visible in the preview.
+   */
+  private refreshRendererBadge(): void {
     if (!this.rendererStatusEl) return;
-
-    const settings = this.context.plugin.settings;
-    const preferred = settings.preferredRenderer;
-    const hasBackgroundImage = !!settings.backgroundImage;
-    const shouldFallback = !settings.useObsidianTheme && hasBackgroundImage;
-    const predicted = preferred === 'webgl' && shouldFallback ? 'canvas' : preferred;
 
     let actualRenderer: 'canvas' | 'webgl' | null = null;
     const leaves = this.context.app.workspace.getLeavesOfType('terminal-view');
@@ -1214,19 +1284,18 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       }
     }
 
-    const renderer = actualRenderer ?? predicted;
-    const rendererLabel = renderer === 'webgl'
+    if (!actualRenderer) {
+      actualRenderer = this.context.plugin.settings.preferredRenderer ?? 'canvas';
+    }
+
+    const rendererLabel = actualRenderer === 'webgl'
       ? t('rendererOptions.webgl')
       : t('rendererOptions.canvas');
-    const sourceLabel = actualRenderer
-      ? t('settingsDetails.terminal.rendererStatusLive')
-      : t('settingsDetails.terminal.rendererStatusPredicted');
-    const fallbackLabel = preferred === 'webgl' && renderer === 'canvas' && shouldFallback
-      ? t('settingsDetails.terminal.rendererStatusFallback')
-      : '';
 
-    const suffix = fallbackLabel ? `${sourceLabel} · ${fallbackLabel}` : sourceLabel;
-    this.rendererStatusEl.setText(`${rendererLabel}（${suffix}）`);
+    this.rendererStatusEl.toggleClass('is-hidden', false);
+    this.rendererStatusEl.setText(rendererLabel);
+    this.rendererStatusEl.setAttribute('aria-label', rendererLabel);
+    this.rendererStatusEl.setAttribute('title', rendererLabel);
   }
 
   private updateThemePreview(): void {
@@ -1242,7 +1311,8 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       : (settings.foregroundColor || '#FFFFFF');
 
     const showBackgroundImage = !useObsidianTheme
-      && !!settings.backgroundImage;
+      && !!settings.backgroundImage
+      && settings.preferredRenderer !== 'webgl';
 
     if (showBackgroundImage) {
       this.themePreviewEl.classList.add('has-background-image');
@@ -1257,6 +1327,11 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
     const blurAmount = settings.blurAmount ?? 0;
     const blurEnabled = showBackgroundImage && settings.enableBlur && blurAmount > 0;
 
+    const fontSize = clamp(settings.fontSize ?? 14, 8, 24);
+    const fontFamily = settings.fontFamily?.trim() || 'var(--font-monospace)';
+    const cursorStyle = settings.cursorStyle ?? 'block';
+    const cursorBlink = !!settings.cursorBlink;
+
     this.applyThemePreviewStyleRule({
       backgroundColor,
       foregroundColor,
@@ -1267,7 +1342,21 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
       blur: blurEnabled ? `${blurAmount}px` : '0px',
       scale: blurEnabled ? '1.05' : '1',
       textOpacity: showBackgroundImage ? String(settings.textOpacity ?? 1.0) : '1',
+      fontSize: `${fontSize}px`,
+      fontFamily,
     });
+
+    if (this.themePreviewCursorEl) {
+      this.themePreviewCursorEl.classList.remove(
+        'is-block',
+        'is-underline',
+        'is-bar',
+      );
+      this.themePreviewCursorEl.classList.add(`is-${cursorStyle}`);
+      this.themePreviewCursorEl.classList.toggle('is-blinking', cursorBlink);
+    }
+
+    this.refreshRendererBadge();
   }
 
   private applyThemePreviewStyleRule(vars: {
@@ -1280,6 +1369,8 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
     blur: string;
     scale: string;
     textOpacity: string;
+    fontSize: string;
+    fontFamily: string;
   }): void {
     if (!this.themePreviewEl) return;
     const style = this.themePreviewEl.style;
@@ -1292,6 +1383,8 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
     style.setProperty('--terminal-preview-bg-blur', vars.blur);
     style.setProperty('--terminal-preview-bg-scale', vars.scale);
     style.setProperty('--terminal-preview-text-opacity', vars.textOpacity);
+    style.setProperty('--terminal-preview-font-size', vars.fontSize);
+    style.setProperty('--terminal-preview-font-family', vars.fontFamily);
   }
 
   /**

@@ -1078,6 +1078,9 @@ export class TerminalView extends ItemView {
       blur: blurEnabled ? `${blurAmount}px` : '0px',
       scale: blurEnabled ? '1.05' : '1',
       textOpacity: canUseBackgroundImage ? String(options?.textOpacity ?? 1.0) : '1',
+      backgroundColor: canUseBackgroundImage
+        ? 'transparent'
+        : this.terminalInstance.getEffectiveBackgroundColor(),
     });
   }
 
@@ -1184,6 +1187,7 @@ export class TerminalView extends ItemView {
     blur: string;
     scale: string;
     textOpacity: string;
+    backgroundColor: string;
   }): void {
     if (!this.terminalContainer) return;
     const style = this.terminalContainer.style;
@@ -1194,6 +1198,9 @@ export class TerminalView extends ItemView {
     style.setProperty('--terminal-bg-blur', vars.blur);
     style.setProperty('--terminal-bg-scale', vars.scale);
     style.setProperty('--terminal-text-opacity', vars.textOpacity);
+    style.setProperty('--terminal-bg-color', vars.backgroundColor);
+    const viewContainer = this.containerEl.querySelector<HTMLElement>('.terminal-view-container');
+    viewContainer?.style.setProperty('--terminal-bg-color', vars.backgroundColor);
   }
 
   private disposeAppearanceStyle(): void {
@@ -1206,6 +1213,9 @@ export class TerminalView extends ItemView {
     style.removeProperty('--terminal-bg-blur');
     style.removeProperty('--terminal-bg-scale');
     style.removeProperty('--terminal-text-opacity');
+    style.removeProperty('--terminal-bg-color');
+    const viewContainer = this.containerEl.querySelector<HTMLElement>('.terminal-view-container');
+    viewContainer?.style.removeProperty('--terminal-bg-color');
   }
 
   /**
