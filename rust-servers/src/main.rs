@@ -1,8 +1,9 @@
 // Terminal Server Main Program
 // Standalone terminal server that provides PTY functionality
 
-mod server;
+mod framing;
 mod router;
+mod server;
 
 // Feature modules
 pub mod pty;
