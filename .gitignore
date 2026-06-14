@@ -51,3 +51,8 @@ docs/
 # Personal scratch notes (not part of the plugin)
 t.md
 new_t.md
+
+# Private Claude dev environment - NEVER commit (keeps strategy, agents, and dev context off public GitHub)
+.claude/
+CLAUDE.md
+*.download
