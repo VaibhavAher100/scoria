@@ -5,6 +5,7 @@
  */
 
 import type { ModuleType, ClientMessage, ServerMessage } from './types';
+import type { Transport } from './transport.ts';
 import { debugLog, errorLog } from '@/utils/logger';
 
 /**
@@ -20,10 +21,10 @@ export type MessageHandler = (msg: ServerMessage) => void;
 export abstract class ModuleClient {
   /** Module type */
   protected readonly module: ModuleType;
-  
-  /** WebSocket connection (injected by ServerManager) */
-  protected ws: WebSocket | null = null;
-  
+
+  /** Transport connection (injected by ServerManager) */
+  protected transport: Transport | null = null;
+
   /** Message handlers */
   private messageHandlers: Set<MessageHandler> = new Set();
 
@@ -32,14 +33,14 @@ export abstract class ModuleClient {
   }
 
   /**
-   * Set the WebSocket connection
+   * Set the transport connection
    * Called by ServerManager
    */
-  setWebSocket(ws: WebSocket | null): void {
-    this.ws = ws;
-    
-    if (ws) {
-      debugLog(`[${this.module}Client] WebSocket 已设置`);
+  setTransport(transport: Transport | null): void {
+    this.transport = transport;
+
+    if (transport) {
+      debugLog(`[${this.module}Client] 传输已设置`);
     }
   }
 
@@ -47,18 +48,18 @@ export abstract class ModuleClient {
    * Check whether connected
    */
   isConnected(): boolean {
-    return this.ws !== null && this.ws.readyState === WebSocket.OPEN;
+    return this.transport !== null && this.transport.isConnected;
   }
 
   /**
    * Send a message to the server
-   * 
+   *
    * @param type Message type
    * @param payload Message payload
    */
   protected send(type: string, payload: Record<string, unknown> = {}): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      errorLog(`[${this.module}Client] WebSocket 未连接，无法发送消息`);
+    if (!this.isConnected()) {
+      errorLog(`[${this.module}Client] 传输未连接，无法发送消息`);
       return;
     }
 
@@ -69,7 +70,7 @@ export abstract class ModuleClient {
     };
 
     try {
-      this.ws.send(JSON.stringify(message));
+      this.transport!.send(JSON.stringify(message));
       debugLog(`[${this.module}Client] 发送消息:`, type);
     } catch (error) {
       errorLog(`[${this.module}Client] 发送消息失败:`, error);
@@ -78,17 +79,17 @@ export abstract class ModuleClient {
 
   /**
    * Send binary data
-   * 
+   *
    * @param data Binary data
    */
   protected sendBinary(data: ArrayBuffer | Uint8Array): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      errorLog(`[${this.module}Client] WebSocket 未连接，无法发送二进制数据`);
+    if (!this.isConnected()) {
+      errorLog(`[${this.module}Client] 传输未连接，无法发送二进制数据`);
       return;
     }
 
     try {
-      this.ws.send(data);
+      this.transport!.sendBinary(data);
     } catch (error) {
       errorLog(`[${this.module}Client] 发送二进制数据失败:`, error);
     }
@@ -142,6 +143,6 @@ export abstract class ModuleClient {
    */
   destroy(): void {
     this.messageHandlers.clear();
-    this.ws = null;
+    this.transport = null;
   }
 }

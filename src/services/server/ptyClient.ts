@@ -108,20 +108,20 @@ export class PtyClient extends ModuleClient {
    * @param data Text data
    */
   write(sessionId: string, data: string): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+    if (!this.isConnected()) {
       return;
     }
     // PTY text input: format [session_id_length][session_id][data]
     const sessionIdBytes = new TextEncoder().encode(sessionId);
     const dataBytes = new TextEncoder().encode(data);
-    
+
     // Build the binary frame
     const frame = new Uint8Array(1 + sessionIdBytes.length + dataBytes.length);
     frame[0] = sessionIdBytes.length;
     frame.set(sessionIdBytes, 1);
     frame.set(dataBytes, 1 + sessionIdBytes.length);
-    
-    this.ws.send(frame);
+
+    this.transport!.sendBinary(frame);
   }
 
   /**
@@ -131,20 +131,20 @@ export class PtyClient extends ModuleClient {
    * @param data Binary data
    */
   writeBinary(sessionId: string, data: Uint8Array | ArrayBuffer): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+    if (!this.isConnected()) {
       return;
     }
-    
+
     const sessionIdBytes = new TextEncoder().encode(sessionId);
     const dataArray = data instanceof ArrayBuffer ? new Uint8Array(data) : data;
-    
+
     // Build the binary frame
     const frame = new Uint8Array(1 + sessionIdBytes.length + dataArray.length);
     frame[0] = sessionIdBytes.length;
     frame.set(sessionIdBytes, 1);
     frame.set(dataArray, 1 + sessionIdBytes.length);
-    
-    this.ws.send(frame);
+
+    this.transport!.sendBinary(frame);
   }
 
   /**

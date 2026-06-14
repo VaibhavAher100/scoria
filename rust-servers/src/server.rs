@@ -6,8 +6,10 @@ use tokio_tungstenite::{accept_async, tungstenite::Message};
 use futures_util::{StreamExt, SinkExt};
 use std::sync::Arc;
 use tokio::sync::Mutex as TokioMutex;
+use async_trait::async_trait;
 
 use crate::router::{MessageRouter, ModuleType, RouterError, ServerResponse};
+use crate::transport::{MessageSink, OutMessage, Sender, SinkError};
 
 /// Logging macro
 macro_rules! log_info {
@@ -93,6 +95,31 @@ pub type WsSender = Arc<TokioMutex<futures_util::stream::SplitSink<
     Message
 >>>;
 
+/// Adapts a raw WebSocket sink to the transport-agnostic [`MessageSink`].
+/// Maps each [`OutMessage`] to its WebSocket frame; ping/pong stays in the
+/// read loop since it is a WebSocket-level concern, not an app message.
+pub struct WebSocketSink {
+    inner: WsSender,
+}
+
+impl WebSocketSink {
+    pub fn new(inner: WsSender) -> WebSocketSink {
+        WebSocketSink { inner }
+    }
+}
+
+#[async_trait]
+impl MessageSink for WebSocketSink {
+    async fn send(&self, msg: OutMessage) -> Result<(), SinkError> {
+        let frame = match msg {
+            OutMessage::Text(text) => Message::Text(text.into()),
+            OutMessage::Binary(data) => Message::Binary(data.into()),
+        };
+        let mut sink = self.inner.lock().await;
+        sink.send(frame).await.map_err(|e| SinkError::new(e.to_string()))
+    }
+}
+
 /// Handle a single WebSocket connection
 async fn handle_connection(
     stream: tokio::net::TcpStream,
@@ -105,12 +132,15 @@ async fn handle_connection(
     // Split the read and write streams
     let (ws_sender, mut ws_receiver) = ws_stream.split();
     let ws_sender: WsSender = Arc::new(TokioMutex::new(ws_sender));
-    
+
+    // Wrap the raw sink in the transport-agnostic sink for app messages.
+    let sender: Sender = Arc::new(WebSocketSink::new(Arc::clone(&ws_sender)));
+
     // Create the message router
     let router = Arc::new(MessageRouter::new());
-    
-    // Set the WebSocket sender (used for PTY output)
-    router.set_ws_sender(Arc::clone(&ws_sender)).await;
+
+    // Set the message sink (used for PTY output)
+    router.set_sender(Arc::clone(&sender)).await;
     
     // Message handling loop
     while let Some(msg_result) = ws_receiver.next().await {
@@ -124,7 +154,7 @@ async fn handle_connection(
                         if let Err(e) = handle_text_message(
                             &text,
                             &router,
-                            &ws_sender
+                            &sender
                         ).await {
                             log_error!("消息处理错误: {}", e);
                         }
@@ -196,18 +226,18 @@ async fn handle_connection(
 async fn handle_text_message(
     text: &str,
     router: &Arc<MessageRouter>,
-    ws_sender: &WsSender,
+    sender: &Sender,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Parse the message
     match router.parse_message(text) {
         Ok(msg) => {
             let module = msg.module;
-            
+
             // Route the message to the matching module
             match router.route(msg).await {
                 Ok(Some(response)) => {
                     // Send the response
-                    send_response(ws_sender, &response).await?;
+                    send_response(sender, &response).await?;
                 }
                 Ok(None) => {
                     // The module handled the message successfully and no response is needed
@@ -217,21 +247,21 @@ async fn handle_text_message(
                     // Module handling failed, so send an error response
                     log_error!("模块处理错误: {}", e);
                     let error_response = router.create_error_response(module, &e);
-                    send_response(ws_sender, &error_response).await?;
+                    send_response(sender, &error_response).await?;
                 }
             }
         }
         Err(e) => {
             // Message parsing failed
             log_error!("消息解析错误: {}", e);
-            
+
             // Try to extract the module field from the raw JSON for the error response
             let module = extract_module_from_json(text);
             let error_response = create_parse_error_response(module, &e);
-            send_response(ws_sender, &error_response).await?;
+            send_response(sender, &error_response).await?;
         }
     }
-    
+
     Ok(())
 }
 
@@ -261,12 +291,11 @@ fn create_parse_error_response(module: ModuleType, error: &RouterError) -> Serve
 
 /// Send a response message
 pub async fn send_response(
-    ws_sender: &WsSender,
+    sender: &Sender,
     response: &ServerResponse,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let json = serde_json::to_string(response)?;
-    let mut sender = ws_sender.lock().await;
-    sender.send(Message::Text(json.into())).await?;
+    sender.send(OutMessage::Text(json)).await?;
     Ok(())
 }
 

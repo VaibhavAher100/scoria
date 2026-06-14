@@ -1,8 +1,12 @@
 // Terminal Server Main Program
 // Standalone terminal server that provides PTY functionality
 
-mod server;
+mod framing;
+#[cfg(windows)]
+mod pipe;
 mod router;
+mod server;
+mod transport;
 
 // Feature modules
 pub mod pty;
@@ -69,6 +73,27 @@ fn parse_args() -> u16 {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Named-pipe transport (Windows only, opt-in via --pipe). The default
+    // stays WebSocket until the TypeScript client speaks framed pipe.
+    #[cfg(windows)]
+    {
+        if env::args().any(|arg| arg == "--pipe") {
+            let name = pipe::new_pipe_name();
+            // The TypeScript side reads this line to learn the pipe name.
+            println!(
+                r#"{{"pipe": {}, "pid": {}}}"#,
+                serde_json::to_string(&name)?,
+                std::process::id()
+            );
+            log_info!("named-pipe transport selected");
+            if let Err(e) = pipe::serve(&name).await {
+                eprintln!("[ERROR] pipe server error: {}", e);
+                std::process::exit(1);
+            }
+            return Ok(());
+        }
+    }
+
     // Parse command-line arguments
     let port = parse_args();
     log_debug!("启动参数: port={}", port);
