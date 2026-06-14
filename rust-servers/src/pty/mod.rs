@@ -97,6 +97,23 @@ impl PtyHandler {
         let mut guard = self.sender.lock().await;
         *guard = Some(sender);
     }
+
+    /// Detach the current client without tearing sessions down.
+    ///
+    /// Called when a connection closes. The sender is cleared so nothing tries
+    /// to write to the dead socket, but the PTY processes keep running so a
+    /// reconnect can re-attach (M2 persistence). Unclaimed sessions are reaped
+    /// by the orphan timeout (M2 S5), not here. This is the replacement for
+    /// [`Self::cleanup_all`] on the daemon-owned transports.
+    ///
+    /// Until S5 lands this is UNBOUNDED: each detached session keeps a live
+    /// shell, an async read task, and a blocked `spawn_blocking` thread. Repeated
+    /// connect/init/disconnect (same user) grows that without a cap. S5's orphan
+    /// timeout closes the gap.
+    pub async fn detach(&self) {
+        let mut guard = self.sender.lock().await;
+        *guard = None;
+    }
     
     /// Handle the init message and create a PTY session
     async fn handle_init(

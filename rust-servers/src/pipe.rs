@@ -67,44 +67,87 @@ impl MessageSink for PipeSink {
     }
 }
 
-/// Create the pipe restricted to the current user, wait for one client, and
-/// serve it. MVP is a single session, so this is one instance, one connection.
+/// Create the pipe restricted to the current user and serve clients on it.
+///
+/// The daemon owns a single shared [`MessageRouter`] for the whole process
+/// lifetime; clients attach to it, they do not build their own. When a client
+/// disconnects the daemon *detaches* (drops that client's sender) rather than
+/// destroying the sessions, then loops to accept the next client on the same
+/// pipe name — so a reload reconnects to the same live shells (M2 persistence).
+/// Sessions are only reaped by the orphan timeout (M2 S5).
+///
+/// Connections are sequential: the next pipe instance is created only after the
+/// current client disconnects, so at most one client is served at a time (the
+/// M2 single-session MVP).
 pub async fn serve(pipe_name: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // The security descriptor is only consulted while the pipe is created; the
-    // kernel copies it into the pipe object. Scope it so the non-Send raw
-    // pointers it holds are dropped before any `.await`, keeping this future
-    // Send (and thus spawnable).
-    let server = {
-        let security = security::user_only_security_attributes()?;
-        // SAFETY: `security` owns a SECURITY_ATTRIBUTES whose descriptor stays
-        // alive across this call; the OS only reads it during pipe creation.
-        unsafe {
-            ServerOptions::new()
-                .first_pipe_instance(true) // fail if the name already exists (anti-squat)
-                .reject_remote_clients(true) // local connections only
-                .create_with_security_attributes_raw(
-                    pipe_name,
-                    security.as_ptr() as *mut std::ffi::c_void,
-                )?
-        }
-    };
+    let router = Arc::new(MessageRouter::new());
 
-    log_info!("listening: {}", pipe_name);
-    server.connect().await?;
-    log_info!("client connected");
+    let mut first_instance = true;
+    loop {
+        let server = create_server(pipe_name, first_instance)?;
+        first_instance = false;
 
-    serve_connection(server).await
+        log_info!("listening: {}", pipe_name);
+        server.connect().await?;
+        log_info!("client connected");
+
+        serve_connection(server, &router).await?;
+
+        // The client is gone. Detach (clear the sender) but keep the sessions
+        // alive for reconnect; loop to accept the next client on the same name.
+        router.detach().await;
+        log_info!("client detached; awaiting reconnect");
+    }
 }
 
+/// Create one instance of the user-only pipe.
+///
+/// `first_instance` maps to `FILE_FLAG_FIRST_PIPE_INSTANCE`: the very first
+/// instance sets it so creation fails if the name is already taken (anti-squat).
+/// Later instances clear it, because the loop drops the old instance before
+/// creating the next, so the name is briefly released between connections and
+/// `FIRST_PIPE_INSTANCE` would spuriously fail.
+///
+/// Note what actually prevents substitution across that name-free gap: it is
+/// NOT the DACL persisting (a pipe's security descriptor lives with the pipe
+/// object, not the name, so during the gap the name is unprotected). It is that
+/// the pipe name is an unguessable per-process GUID emitted only to the daemon's
+/// own stdout, which a foreign account cannot read. If the name were ever made
+/// fixed or predictable, this gap would become a real squatting/MITM vector.
+fn create_server(
+    pipe_name: &str,
+    first_instance: bool,
+) -> Result<NamedPipeServer, Box<dyn std::error::Error + Send + Sync>> {
+    // The security descriptor is only consulted while the pipe is created; the
+    // kernel copies it into the pipe object. Scope it so the non-Send raw
+    // pointers it holds are dropped before returning.
+    let security = security::user_only_security_attributes()?;
+    // SAFETY: `security` owns a SECURITY_ATTRIBUTES whose descriptor stays
+    // alive across this call; the OS only reads it during pipe creation.
+    let server = unsafe {
+        ServerOptions::new()
+            .first_pipe_instance(first_instance)
+            .reject_remote_clients(true) // local connections only
+            .create_with_security_attributes_raw(
+                pipe_name,
+                security.as_ptr() as *mut std::ffi::c_void,
+            )?
+    };
+    Ok(server)
+}
+
+/// Serve a single connected client until it disconnects. Session lifecycle is
+/// the caller's concern: this only binds the sender, pumps frames, and returns
+/// when the connection ends (clean EOF or a framing desync).
 async fn serve_connection(
     server: NamedPipeServer,
+    router: &Arc<MessageRouter>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let (mut reader, writer) = tokio::io::split(server);
     let sender: Sender = Arc::new(PipeSink {
         writer: TokioMutex::new(writer),
     });
 
-    let router = Arc::new(MessageRouter::new());
     router.set_sender(Arc::clone(&sender)).await;
 
     let mut decoder = FrameDecoder::new();
@@ -118,12 +161,12 @@ async fn serve_connection(
         decoder.feed(&buf[..n]);
         loop {
             match decoder.next() {
-                Ok(Some(frame)) => dispatch(&router, &sender, frame).await,
+                Ok(Some(frame)) => dispatch(router, &sender, frame).await,
                 Ok(None) => break,
                 Err(e) => {
-                    // Protocol violation: the stream is desynchronized. Drop it.
-                    log_error!("framing error, closing pipe: {}", e);
-                    router.pty_handler().cleanup_all().await;
+                    // Protocol desync. Drop the connection; the caller detaches
+                    // and waits for a fresh client (sessions survive).
+                    log_error!("framing error, dropping connection: {}", e);
                     return Ok(());
                 }
             }
@@ -131,7 +174,6 @@ async fn serve_connection(
     }
 
     log_info!("client disconnected");
-    router.pty_handler().cleanup_all().await;
     Ok(())
 }
 
@@ -406,6 +448,55 @@ mod tests {
         };
 
         assert_eq!(response.kind, FrameType::Text);
+        let text = String::from_utf8_lossy(&response.payload);
+        assert!(text.contains("PARSE_ERROR"), "unexpected reply: {text}");
+
+        server.abort();
+    }
+
+    /// Open the pipe, retrying until the server has created the instance.
+    async fn connect_client(name: &str) -> tokio::net::windows::named_pipe::NamedPipeClient {
+        loop {
+            match ClientOptions::new().open(name) {
+                Ok(client) => break client,
+                Err(_) => sleep(Duration::from_millis(20)).await,
+            }
+        }
+    }
+
+    /// The S2 deliverable: the daemon serves a second client on the same pipe
+    /// name after the first disconnects. The pre-M2 code served exactly one
+    /// client then returned, so a reload could not reconnect.
+    #[tokio::test]
+    async fn pipe_accepts_a_second_client_after_disconnect() {
+        let name = new_pipe_name();
+        let server_name = name.clone();
+        let server = tokio::spawn(async move { serve(&server_name).await });
+
+        // First client connects, then disconnects.
+        let c1 = connect_client(&name).await;
+        drop(c1);
+
+        // A second client must be able to connect on the SAME name — only
+        // possible because the daemon looped to create a new pipe instance.
+        let c2 = connect_client(&name).await;
+        let (mut reader, mut writer) = tokio::io::split(c2);
+
+        // Round-trip a parse error to prove the second connection is served.
+        let bad = Frame::text(b"still not json".to_vec()).encode().unwrap();
+        writer.write_all(&bad).await.unwrap();
+
+        let mut decoder = FrameDecoder::new();
+        let mut buf = vec![0u8; 4096];
+        let response = loop {
+            let n = reader.read(&mut buf).await.unwrap();
+            assert!(n > 0, "server closed without replying to the second client");
+            decoder.feed(&buf[..n]);
+            if let Some(frame) = decoder.next().unwrap() {
+                break frame;
+            }
+        };
+
         let text = String::from_utf8_lossy(&response.payload);
         assert!(text.contains("PARSE_ERROR"), "unexpected reply: {text}");
 
