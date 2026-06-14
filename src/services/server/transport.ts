@@ -201,7 +201,9 @@ export class PipeTransport implements Transport {
       });
 
       socket.on('data', (chunk: Buffer) => {
-        this.decoder.feed(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength));
+        // Copy out of Node's pooled Buffer: a view would alias memory Node may
+        // reuse before the decoder consumes it. `new Uint8Array(buffer)` copies.
+        this.decoder.feed(new Uint8Array(chunk));
         try {
           let frame = this.decoder.next();
           while (frame !== null) {

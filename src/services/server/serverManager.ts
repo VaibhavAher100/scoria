@@ -35,6 +35,14 @@ import { WebSocketTransport, PipeTransport } from './transport.ts';
 
 type BinaryUpdateResult = 'skipped-offline' | 'already-ready' | 'downloaded' | 'updated';
 const DEV_RELOAD_REQUEST_FILE = '.termy-dev-reload.json';
+
+/**
+ * Shape the server's announced pipe path must match before the client will
+ * connect to it: `\\.\pipe\termy-<uuid>`. Defense in depth - the path comes
+ * from our own child's stdout, but validating it means a tampered or buggy
+ * server cannot steer the client at an arbitrary (foreign) pipe.
+ */
+const PIPE_NAME_RE = /^\\\\\.\\pipe\\termy-[0-9a-f-]{36}$/i;
 const DEV_RELOAD_PHASE_INSTALLING = 'installing';
 
 interface ServerExitDetails {
@@ -588,21 +596,33 @@ export class ServerManager {
       const onData = (chunk: Buffer) => {
         buffer += chunk.toString();
 
-        try {
-          const match = buffer.match(/\{[^}]+\}/);
-          if (match) {
-            const info = JSON.parse(match[0]) as ServerInfo;
-            const hasPipe = typeof info.pipe === 'string' && info.pipe.length > 0;
-            const hasPort = typeof info.port === 'number' && info.port > 0;
-            if (hasPipe || hasPort) {
-              window.clearTimeout(timeout);
-              this.process?.stdout?.off('data', onData);
-              debugLog('[ServerManager] 解析到服务器信息:', info);
-              resolve(info);
-            }
+        // The server prints exactly one JSON object per line. Parse complete
+        // lines only - a regex over merged stdout can grab a partial/wrong
+        // object once the format grows.
+        let newlineIdx: number;
+        while ((newlineIdx = buffer.indexOf('\n')) !== -1) {
+          const line = buffer.slice(0, newlineIdx).trim();
+          buffer = buffer.slice(newlineIdx + 1);
+          if (!line) {
+            continue;
           }
-        } catch {
-          // JSON parsing failed, keep waiting
+
+          let info: ServerInfo;
+          try {
+            info = JSON.parse(line) as ServerInfo;
+          } catch {
+            continue; // not the info line, keep scanning
+          }
+
+          const hasPipe = typeof info.pipe === 'string' && PIPE_NAME_RE.test(info.pipe);
+          const hasPort = typeof info.port === 'number' && info.port > 0;
+          if (hasPipe || hasPort) {
+            window.clearTimeout(timeout);
+            this.process?.stdout?.off('data', onData);
+            debugLog('[ServerManager] 解析到服务器信息:', info);
+            resolve(info);
+            return;
+          }
         }
       };
 
