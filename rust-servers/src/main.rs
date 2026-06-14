@@ -4,6 +4,7 @@
 mod framing;
 mod router;
 mod server;
+mod transport;
 
 // Feature modules
 pub mod pty;

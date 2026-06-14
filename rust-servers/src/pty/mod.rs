@@ -10,13 +10,11 @@ pub use shell::{get_shell_by_type, get_default_shell};
 
 use crate::router::{ModuleHandler, ModuleMessage, ModuleType, RouterError, ServerResponse};
 use crate::pty::osc_scanner::{OscEvent, OscScanner};
-use crate::server::WsSender;
+use crate::transport::{OutMessage, Sender};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::Mutex as TokioMutex;
 use tokio::time::{self, Duration, Instant};
-use tokio_tungstenite::tungstenite::Message;
-use futures_util::SinkExt;
 use uuid::Uuid;
 
 /// Logging macros
@@ -80,8 +78,8 @@ impl PtySessionContext {
 pub struct PtyHandler {
     /// Session registry: session_id -> PtySessionContext
     sessions: TokioMutex<HashMap<String, PtySessionContext>>,
-    /// WebSocket sender (used to send PTY output)
-    ws_sender: TokioMutex<Option<WsSender>>,
+    /// Message sink used to send PTY output to the client
+    sender: TokioMutex<Option<Sender>>,
 }
 
 impl PtyHandler {
@@ -89,14 +87,14 @@ impl PtyHandler {
     pub fn new() -> Self {
         Self {
             sessions: TokioMutex::new(HashMap::new()),
-            ws_sender: TokioMutex::new(None),
+            sender: TokioMutex::new(None),
         }
     }
-    
-    /// Set the WebSocket sender
-    pub async fn set_ws_sender(&self, sender: WsSender) {
-        let mut ws_sender = self.ws_sender.lock().await;
-        *ws_sender = Some(sender);
+
+    /// Set the message sink
+    pub async fn set_sender(&self, sender: Sender) {
+        let mut guard = self.sender.lock().await;
+        *guard = Some(sender);
     }
     
     /// Handle the init message and create a PTY session
@@ -179,12 +177,13 @@ impl PtyHandler {
         const OUTPUT_BATCH_INTERVAL_MS: u64 = 4;
         const READ_BUFFER_SIZE: usize = 8192;
 
-        let ws_sender = {
-            let ws_sender_guard = self.ws_sender.lock().await;
-            ws_sender_guard.clone()
+        let sender = {
+            let guard = self.sender.lock().await;
+            guard.clone()
         };
-        
-        let ws_sender = ws_sender.ok_or_else(|| RouterError::ModuleError("WebSocket sender not set".to_string()))?;
+
+        let sender = sender
+            .ok_or_else(|| RouterError::ModuleError("message sink not set".to_string()))?;
         
         // Start the reader task
         let task = tokio::spawn(async move {
@@ -288,8 +287,7 @@ impl PtyHandler {
                     frame.extend_from_slice(session_id_bytes);
                     frame.extend_from_slice(&batch_buffer);
 
-                    let mut sender = ws_sender.lock().await;
-                    if let Err(e) = sender.send(Message::Binary(frame.into())).await {
+                    if let Err(e) = sender.send(OutMessage::Binary(frame)).await {
                         log_error!("发送 PTY 输出失败: session_id={}, {}", session_id, e);
                         break;
                     }
@@ -308,8 +306,7 @@ impl PtyHandler {
                             "shell_event",
                             event_payload,
                         );
-                        let mut sender = ws_sender.lock().await;
-                        if let Err(e) = sender.send(Message::Text(response.to_json().into())).await {
+                        if let Err(e) = sender.send(OutMessage::Text(response.to_json())).await {
                             log_error!("发送 shell_event 失败: session_id={}, {}", session_id, e);
                             break;
                         }
@@ -336,8 +333,7 @@ impl PtyHandler {
                             "code": 0
                         }),
                     );
-                    let mut sender = ws_sender.lock().await;
-                    if let Err(e) = sender.send(Message::Text(exit_response.to_json().into())).await {
+                    if let Err(e) = sender.send(OutMessage::Text(exit_response.to_json())).await {
                         log_error!("发送 exit 事件失败: session_id={}, {}", session_id, e);
                     }
                     break;

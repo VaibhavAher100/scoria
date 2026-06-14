@@ -1,5 +1,9 @@
 // Length-prefixed message framing for stream transports (named pipe / UDS).
 //
+// Wired into the named-pipe transport in M1 slice 3; until a stream transport
+// consumes it, the binary build sees these items as unused.
+#![allow(dead_code)]
+//
 // WebSocket gives us message boundaries for free; raw byte streams do not.
 // Every message is framed as:
 //

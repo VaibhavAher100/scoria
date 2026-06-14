@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use crate::server::WsSender;
+use crate::transport::Sender;
 
 /// Logging macro
 macro_rules! log_info {
@@ -183,9 +183,9 @@ impl MessageRouter {
         }
     }
     
-    /// Set the WebSocket sender (used for PTY output)
-    pub async fn set_ws_sender(&self, sender: WsSender) {
-        self.pty_handler.set_ws_sender(sender).await;
+    /// Set the message sink used to stream PTY output back to the client.
+    pub async fn set_sender(&self, sender: Sender) {
+        self.pty_handler.set_sender(sender).await;
     }
     
     /// Get a reference to the PTY handler (used to write data)
