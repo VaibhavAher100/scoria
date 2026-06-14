@@ -4,6 +4,7 @@
 mod session;
 mod shell;
 mod osc_scanner;
+mod replay;
 
 pub use session::{PtySession, PtyReader, PtyWriter};
 pub use shell::{get_shell_by_type, get_default_shell};
