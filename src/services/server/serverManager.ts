@@ -18,6 +18,7 @@ type FsModule = typeof import('fs');
 type PathModule = typeof import('path');
 type ChildProcessModule = typeof import('child_process');
 type ChildProcess = import('child_process').ChildProcess;
+type NetModule = typeof import('net');
 import type { 
   ServerInfo, 
   ServerEvents,
@@ -29,8 +30,8 @@ import {
 import { PtyClient } from './ptyClient';
 import { BinaryDownloader } from './binaryDownloader';
 import type { BinaryDownloadConfig } from './binaryDownloadUrls';
-import type { Transport, TransportMessage } from './transport.ts';
-import { WebSocketTransport } from './transport.ts';
+import type { Transport, TransportMessage, SocketConnector } from './transport.ts';
+import { WebSocketTransport, PipeTransport } from './transport.ts';
 
 type BinaryUpdateResult = 'skipped-offline' | 'already-ready' | 'downloaded' | 'updated';
 const DEV_RELOAD_REQUEST_FILE = '.termy-dev-reload.json';
@@ -90,8 +91,11 @@ export class ServerManager {
   /** Server transport connection (WebSocket today; named pipe in slice 5) */
   private transport: Transport | null = null;
   
-  /** Server port */
+  /** Server port (WebSocket transport) */
   private port: number | null = null;
+
+  /** Server named-pipe path (Windows named-pipe transport) */
+  private pipePath: string | null = null;
   
   /** Whether shutdown is in progress */
   private isShuttingDown = false;
@@ -142,6 +146,7 @@ export class ServerManager {
   private readonly fs: FsModule;
   private readonly path: PathModule;
   private readonly spawn: ChildProcessModule['spawn'];
+  private readonly net: NetModule;
 
   constructor(
     pluginDir: string,
@@ -157,6 +162,7 @@ export class ServerManager {
     this.fs = window.require('fs') as FsModule;
     this.path = window.require('path') as PathModule;
     this.spawn = (window.require('child_process') as ChildProcessModule).spawn;
+    this.net = window.require('net') as NetModule;
     this.binaryDownloader = new BinaryDownloader(pluginDir, version, downloadConfig);
   }
 
@@ -171,7 +177,7 @@ export class ServerManager {
    */
   async ensureServer(): Promise<void> {
     // If the server is already running, return immediately
-    if (this.port !== null && this.transport?.isConnected) {
+    if (this.hasEndpoint() && this.transport?.isConnected) {
       return;
     }
 
@@ -265,6 +271,7 @@ export class ServerManager {
     
     // Clear state
     this.port = null;
+    this.pipePath = null;
     this.serverStartPromise = null;
     this.wsConnectPromise = null;
     
@@ -282,7 +289,21 @@ export class ServerManager {
    * Whether the server is running
    */
   isServerRunning(): boolean {
-    return this.port !== null && this.process !== null;
+    return this.hasEndpoint() && this.process !== null;
+  }
+
+  /**
+   * Whether a server endpoint (port or pipe) is known
+   */
+  private hasEndpoint(): boolean {
+    return this.port !== null || this.pipePath !== null;
+  }
+
+  /**
+   * Whether this platform uses the named-pipe transport
+   */
+  private usePipe(): boolean {
+    return process.platform === 'win32';
   }
 
   /**
@@ -351,8 +372,10 @@ export class ServerManager {
       // Ensure executable permission (Unix)
       await this.ensureExecutable(binaryPath);
       
-      // Start the process
-      this.process = this.spawn(binaryPath, ['--port', '0'], {
+      // Start the process. Windows uses the OS-authenticated named pipe; every
+      // other platform stays on the loopback WebSocket until UDS lands (M3).
+      const serverArgs = this.usePipe() ? ['--pipe'] : ['--port', '0'];
+      this.process = this.spawn(binaryPath, serverArgs, {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: {
           ...process.env,
@@ -361,21 +384,25 @@ export class ServerManager {
         windowsHide: true,
         detached: false,
       });
-      
+
       debugLog('[ServerManager] 服务器进程已启动, PID:', this.process.pid);
-      
+
       // Listen for process errors
       this.process.on('error', (error) => {
         errorLog('[ServerManager] 服务器进程错误:', error);
         this.handleServerError(error);
       });
-      
-      // Wait for port information
-      const port = await this.waitForServerPort();
-      this.port = port;
+
+      // Wait for endpoint information (pipe path on Windows, port otherwise)
+      const info = await this.waitForServerInfo();
+      if (info.pipe) {
+        this.pipePath = info.pipe;
+        debugLog(`[ServerManager] 服务器已启动，命名管道: ${info.pipe}`);
+      } else {
+        this.port = info.port ?? null;
+        debugLog(`[ServerManager] 服务器已启动，端口: ${info.port}`);
+      }
       this.restartAttempts = 0;
-      
-      debugLog(`[ServerManager] 服务器已启动，端口: ${port}`);
       
       // Set up the exit handler
       this.setupServerExitHandler();
@@ -383,8 +410,9 @@ export class ServerManager {
       // Establish the transport connection
       await this.connectTransport();
 
-      this.emit('server-started', port);
-      
+      // Pipe mode has no port; report 0 (consumers only log this).
+      this.emit('server-started', this.port ?? 0);
+
     } catch (error) {
       this.serverStartPromise = null;
       
@@ -534,9 +562,10 @@ export class ServerManager {
   }
 
   /**
-   * Wait for the server to output port information
+   * Wait for the server to output its endpoint info on stdout: a named-pipe
+   * path (`{"pipe": "..."}`) on Windows or a port (`{"port": N}`) elsewhere.
    */
-  private async waitForServerPort(): Promise<number> {
+  private async waitForServerInfo(): Promise<ServerInfo> {
     return new Promise((resolve, reject) => {
       if (!this.process || !this.process.stdout) {
         reject(new ServerManagerError(
@@ -547,7 +576,7 @@ export class ServerManager {
       }
 
       let buffer = '';
-      
+
       const timeout = window.setTimeout(() => {
         this.process?.stdout?.off('data', onData);
         reject(new ServerManagerError(
@@ -558,16 +587,18 @@ export class ServerManager {
 
       const onData = (chunk: Buffer) => {
         buffer += chunk.toString();
-        
+
         try {
           const match = buffer.match(/\{[^}]+\}/);
           if (match) {
             const info = JSON.parse(match[0]) as ServerInfo;
-            if (info.port && typeof info.port === 'number') {
+            const hasPipe = typeof info.pipe === 'string' && info.pipe.length > 0;
+            const hasPort = typeof info.port === 'number' && info.port > 0;
+            if (hasPipe || hasPort) {
               window.clearTimeout(timeout);
               this.process?.stdout?.off('data', onData);
               debugLog('[ServerManager] 解析到服务器信息:', info);
-              resolve(info.port);
+              resolve(info);
             }
           }
         } catch {
@@ -595,12 +626,30 @@ export class ServerManager {
   }
 
   /**
+   * Build (but do not connect) the transport for the running server's endpoint.
+   * Returns null if no endpoint is known yet.
+   */
+  private buildTransport(): Transport | null {
+    if (this.pipePath) {
+      debugLog('[ServerManager] 连接传输 (命名管道):', this.pipePath);
+      const connector: SocketConnector = (path) => this.net.connect(path);
+      return new PipeTransport(this.pipePath, connector);
+    }
+    if (this.port) {
+      const wsUrl = `ws://127.0.0.1:${this.port}`;
+      debugLog('[ServerManager] 连接传输 (WebSocket):', wsUrl);
+      return new WebSocketTransport(wsUrl);
+    }
+    return null;
+  }
+
+  /**
    * Establish the transport connection
    *
-   * Builds a transport for the running server and connects it. Today this is
-   * always a loopback WebSocket; slice 5 selects a named pipe on Windows. The
-   * connection lifecycle (open/close/message) is driven through the
-   * `TransportHandlers` so this layer no longer knows the wire type.
+   * Builds a transport for the running server and connects it: a named pipe
+   * when the server emitted a pipe path (Windows), otherwise a loopback
+   * WebSocket. The connection lifecycle (open/close/message) is driven through
+   * the `TransportHandlers` so this layer no longer knows the wire type.
    */
   private async connectTransport(): Promise<void> {
     if (this.wsConnectPromise) {
@@ -612,18 +661,15 @@ export class ServerManager {
   }
 
   private async doConnectTransport(): Promise<void> {
-    if (!this.port) {
+    const transport = this.buildTransport();
+    if (!transport) {
       this.wsConnectPromise = null;
       throw new ServerManagerError(
         ServerErrorCode.CONNECTION_FAILED,
-        '服务器端口未知'
+        '服务器端点未知'
       );
     }
 
-    const wsUrl = `ws://127.0.0.1:${this.port}`;
-    debugLog('[ServerManager] 连接传输:', wsUrl);
-
-    const transport = new WebSocketTransport(wsUrl);
     this.transport = transport;
 
     try {
@@ -676,7 +722,7 @@ export class ServerManager {
     this.emit('ws-disconnected');
 
     // If this was not an intentional shutdown, try to reconnect
-    if (!this.isShuttingDown && this.port !== null) {
+    if (!this.isShuttingDown && this.hasEndpoint()) {
       this.scheduleReconnect();
     }
   }
@@ -768,7 +814,7 @@ export class ServerManager {
    * Perform WebSocket reconnect
    */
   private async attemptReconnect(): Promise<void> {
-    if (this.isShuttingDown || !this.port) {
+    if (this.isShuttingDown || !this.hasEndpoint()) {
       this.isReconnecting = false;
       return;
     }
@@ -820,6 +866,7 @@ export class ServerManager {
       if (this.process === exitedProcess) {
         this.process = null;
         this.port = null;
+        this.pipePath = null;
         this.serverStartPromise = null;
         this.wsConnectPromise = null;
       }
@@ -1015,7 +1062,7 @@ export class ServerManager {
     this.wsConnectPromise = null;
 
     // If the server is still running, reconnect the transport directly
-    if (this.port !== null && this.process !== null) {
+    if (this.hasEndpoint() && this.process !== null) {
       await this.connectTransport();
     } else {
       // Otherwise restart the entire server

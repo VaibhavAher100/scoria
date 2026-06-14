@@ -246,12 +246,18 @@ mod security {
         }
     }
 
+    /// The pipe's access-control policy as an SDDL string.
+    ///
+    /// `D:P` -> a protected DACL (do not inherit ACEs from a parent).
+    /// `FA`  -> full access. Grant only the current user and LocalSystem (SY);
+    /// with no other ACEs, every other principal is implicitly denied.
+    pub fn user_only_sddl(sid: &str) -> String {
+        format!("D:P(A;;FA;;;{sid})(A;;FA;;;SY)")
+    }
+
     pub fn user_only_security_attributes() -> io::Result<UserOnlySecurity> {
         let sid = current_user_sid_string()?;
-        // D:P  -> a protected DACL (do not inherit ACEs from a parent).
-        // FA   -> full access. Grant the current user and LocalSystem (SY);
-        //         with no other ACEs, every other principal is denied.
-        let sddl = format!("D:P(A;;FA;;;{sid})(A;;FA;;;SY)");
+        let sddl = user_only_sddl(&sid);
         let descriptor = descriptor_from_sddl(&sddl)?;
 
         let sa = SECURITY_ATTRIBUTES {
@@ -347,6 +353,24 @@ mod tests {
     fn security_attributes_build() {
         let security = security::user_only_security_attributes().expect("build SA");
         assert!(!security.as_ptr().is_null());
+    }
+
+    #[test]
+    fn sddl_denies_unauthorized_principals() {
+        let sddl = security::user_only_sddl("S-1-5-21-1-2-3-1001");
+        // Protected DACL: a parent ACL cannot inherit in to widen access.
+        assert!(sddl.starts_with("D:P"), "DACL must be protected: {sddl}");
+        // Full access for exactly the owner SID and LocalSystem.
+        assert!(sddl.contains("(A;;FA;;;S-1-5-21-1-2-3-1001)"));
+        assert!(sddl.contains("(A;;FA;;;SY)"));
+        // No ACE for Everyone (S-1-1-0 / "WD") or Authenticated Users ("AU"):
+        // an unauthorized local process is denied by the absence of any ACE.
+        assert!(!sddl.contains("S-1-1-0"), "must not grant Everyone: {sddl}");
+        assert!(!sddl.contains(";WD)"), "must not grant Everyone: {sddl}");
+        assert!(
+            !sddl.contains(";AU)"),
+            "must not grant Authenticated Users: {sddl}"
+        );
     }
 
     #[tokio::test]

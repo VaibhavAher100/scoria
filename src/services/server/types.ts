@@ -22,10 +22,12 @@ export type ModuleType = 'pty';
  * Server info
  */
 export interface ServerInfo {
-  /** Listening port */
-  port: number;
+  /** Listening port (WebSocket transport) */
+  port?: number;
+  /** Named-pipe path (Windows named-pipe transport) */
+  pipe?: string;
   /** Process PID */
-  pid: number;
+  pid?: number;
 }
 
 // ============================================================================
