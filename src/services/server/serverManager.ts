@@ -29,6 +29,8 @@ import {
 import { PtyClient } from './ptyClient';
 import { BinaryDownloader } from './binaryDownloader';
 import type { BinaryDownloadConfig } from './binaryDownloadUrls';
+import type { Transport, TransportMessage } from './transport.ts';
+import { WebSocketTransport } from './transport.ts';
 
 type BinaryUpdateResult = 'skipped-offline' | 'already-ready' | 'downloaded' | 'updated';
 const DEV_RELOAD_REQUEST_FILE = '.termy-dev-reload.json';
@@ -85,8 +87,8 @@ export class ServerManager {
   /** Server process */
   private process: ChildProcess | null = null;
   
-  /** WebSocket connection */
-  private ws: WebSocket | null = null;
+  /** Server transport connection (WebSocket today; named pipe in slice 5) */
+  private transport: Transport | null = null;
   
   /** Server port */
   private port: number | null = null;
@@ -169,7 +171,7 @@ export class ServerManager {
    */
   async ensureServer(): Promise<void> {
     // If the server is already running, return immediately
-    if (this.port !== null && this.ws?.readyState === WebSocket.OPEN) {
+    if (this.port !== null && this.transport?.isConnected) {
       return;
     }
 
@@ -202,8 +204,8 @@ export class ServerManager {
   pty(): PtyClient {
     if (!this._ptyClient) {
       this._ptyClient = new PtyClient();
-      if (this.ws) {
-        this._ptyClient.setWebSocket(this.ws);
+      if (this.transport) {
+        this._ptyClient.setTransport(this.transport);
       }
     }
     return this._ptyClient;
@@ -222,14 +224,14 @@ export class ServerManager {
     // Cancel the reconnect timer
     this.cancelReconnect();
     
-    // Close the WebSocket connection
-    if (this.ws) {
+    // Close the transport connection
+    if (this.transport) {
       try {
-        this.ws.close(1000, 'Shutdown');
+        this.transport.close();
       } catch (error) {
-        debugWarn('[ServerManager] 关闭 WebSocket 时出错:', error);
+        debugWarn('[ServerManager] 关闭传输时出错:', error);
       }
-      this.ws = null;
+      this.transport = null;
     }
     
     // Stop the server process
@@ -284,10 +286,10 @@ export class ServerManager {
   }
 
   /**
-   * Whether the WebSocket is connected
+   * Whether the transport is connected
    */
   isConnected(): boolean {
-    return this.ws !== null && this.ws.readyState === WebSocket.OPEN;
+    return this.transport !== null && this.transport.isConnected;
   }
 
   /**
@@ -378,9 +380,9 @@ export class ServerManager {
       // Set up the exit handler
       this.setupServerExitHandler();
       
-      // Establish the WebSocket connection
-      await this.connectWebSocket();
-      
+      // Establish the transport connection
+      await this.connectTransport();
+
       this.emit('server-started', port);
       
     } catch (error) {
@@ -593,132 +595,122 @@ export class ServerManager {
   }
 
   /**
-   * Establish the WebSocket connection
+   * Establish the transport connection
+   *
+   * Builds a transport for the running server and connects it. Today this is
+   * always a loopback WebSocket; slice 5 selects a named pipe on Windows. The
+   * connection lifecycle (open/close/message) is driven through the
+   * `TransportHandlers` so this layer no longer knows the wire type.
    */
-  private async connectWebSocket(): Promise<void> {
+  private async connectTransport(): Promise<void> {
     if (this.wsConnectPromise) {
       return this.wsConnectPromise;
     }
 
-    this.wsConnectPromise = new Promise((resolve, reject) => {
-      if (!this.port) {
-        this.wsConnectPromise = null;
-        reject(new ServerManagerError(
-          ServerErrorCode.CONNECTION_FAILED,
-          '服务器端口未知'
-        ));
-        return;
-      }
-
-      const wsUrl = `ws://127.0.0.1:${this.port}`;
-      debugLog('[ServerManager] 连接 WebSocket:', wsUrl);
-      
-      this.ws = new WebSocket(wsUrl);
-      const ws = this.ws;
-      
-      const timeout = window.setTimeout(() => {
-        if (this.ws === ws) {
-          this.wsConnectPromise = null;
-        }
-        reject(new ServerManagerError(
-          ServerErrorCode.CONNECTION_FAILED,
-          'WebSocket 连接超时'
-        ));
-      }, 5000);
-
-      ws.onopen = () => {
-        window.clearTimeout(timeout);
-        debugLog('[ServerManager] WebSocket 已连接');
-        
-        // Reset the reconnect counter
-        this.wsReconnectAttempts = 0;
-        this.isReconnecting = false;
-        
-        // Update the WebSocket on all module clients
-        this.updateClientsWebSocket();
-        
-        this.emit('ws-connected');
-        resolve();
-      };
-
-      ws.onclose = (event) => {
-        debugLog('[ServerManager] WebSocket 已断开, code:', event.code, 'reason:', event.reason);
-        if (this.ws === ws) {
-          this.ws = null;
-          this.wsConnectPromise = null;
-        }
-        
-        // Clear the WebSocket on module clients
-        this._ptyClient?.setWebSocket(null);
-
-        if (this.isDevInstallInProgress()) {
-          debugLog('[ServerManager] 开发安装进行中，跳过 WebSocket 重连通知');
-          return;
-        }
-        
-        this.emit('ws-disconnected');
-        
-        // If this was not an intentional shutdown, try to reconnect
-        if (!this.isShuttingDown && this.port !== null) {
-          this.scheduleReconnect();
-        }
-      };
-
-      ws.onerror = (event) => {
-        window.clearTimeout(timeout);
-        errorLog('[ServerManager] WebSocket 错误:', event);
-        // Do not reject here; let onclose handle it
-      };
-
-      ws.onmessage = (event) => {
-        this.handleWebSocketMessage(event);
-      };
-    });
-
+    this.wsConnectPromise = this.doConnectTransport();
     return this.wsConnectPromise;
   }
 
+  private async doConnectTransport(): Promise<void> {
+    if (!this.port) {
+      this.wsConnectPromise = null;
+      throw new ServerManagerError(
+        ServerErrorCode.CONNECTION_FAILED,
+        '服务器端口未知'
+      );
+    }
+
+    const wsUrl = `ws://127.0.0.1:${this.port}`;
+    debugLog('[ServerManager] 连接传输:', wsUrl);
+
+    const transport = new WebSocketTransport(wsUrl);
+    this.transport = transport;
+
+    try {
+      await transport.connect({
+        onMessage: (msg) => this.handleTransportMessage(msg),
+        onClose: (info) => this.handleTransportClose(transport, info),
+        onError: (error) => errorLog('[ServerManager] 传输错误:', error),
+      });
+    } catch (error) {
+      if (this.transport === transport) {
+        this.transport = null;
+        this.wsConnectPromise = null;
+      }
+      throw new ServerManagerError(
+        ServerErrorCode.CONNECTION_FAILED,
+        `传输连接失败: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+
+    debugLog('[ServerManager] 传输已连接');
+
+    // Reset the reconnect counter
+    this.wsReconnectAttempts = 0;
+    this.isReconnecting = false;
+
+    // Update the transport on all module clients
+    this.updateClientsTransport();
+
+    this.emit('ws-connected');
+  }
+
   /**
-   * Update the WebSocket on all module clients
+   * Handle the transport closing after a successful open.
    */
-  private updateClientsWebSocket(): void {
-    if (this.ws) {
-      this._ptyClient?.setWebSocket(this.ws);
+  private handleTransportClose(transport: Transport, info: { code?: number; reason?: string }): void {
+    debugLog('[ServerManager] 传输已断开, code:', info.code, 'reason:', info.reason);
+    if (this.transport === transport) {
+      this.transport = null;
+      this.wsConnectPromise = null;
+    }
+
+    // Clear the transport on module clients
+    this._ptyClient?.setTransport(null);
+
+    if (this.isDevInstallInProgress()) {
+      debugLog('[ServerManager] 开发安装进行中，跳过传输重连通知');
+      return;
+    }
+
+    this.emit('ws-disconnected');
+
+    // If this was not an intentional shutdown, try to reconnect
+    if (!this.isShuttingDown && this.port !== null) {
+      this.scheduleReconnect();
     }
   }
 
   /**
-   * Handle WebSocket messages
+   * Update the transport on all module clients
    */
-  private handleWebSocketMessage(event: MessageEvent): void {
+  private updateClientsTransport(): void {
+    if (this.transport) {
+      this._ptyClient?.setTransport(this.transport);
+    }
+  }
+
+  /**
+   * Handle a message from the transport
+   */
+  private handleTransportMessage(msg: TransportMessage): void {
     // Handle binary messages (PTY output)
-    if (event.data instanceof ArrayBuffer) {
-      this._ptyClient?.handleBinaryMessage(event.data);
+    if (msg.kind === 'binary') {
+      this._ptyClient?.handleBinaryMessage(msg.data);
       return;
     }
-    
-    if (event.data instanceof Blob) {
-      void event.data.arrayBuffer()
-        .then(buffer => {
-          this._ptyClient?.handleBinaryMessage(buffer);
-        })
-        .catch((error) => {
-          errorLog('[ServerManager] 解析二进制消息失败:', error);
-        });
-      return;
-    }
-    
+
     // Handle JSON messages
     try {
-      const msg = JSON.parse(event.data as string) as ServerMessage;
-      
+      const parsed = JSON.parse(msg.data) as ServerMessage;
+
       // Dispatch messages by module
-      switch (msg.module) {
+      switch (parsed.module) {
         case 'pty':
-          this._ptyClient?.handleMessage(msg);
+          this._ptyClient?.handleMessage(parsed);
           break;
         default:
-          debugWarn('[ServerManager] 未知模块消息:', msg);
+          debugWarn('[ServerManager] 未知模块消息:', parsed);
       }
     } catch (error) {
       errorLog('[ServerManager] 解析消息失败:', error);
@@ -782,10 +774,10 @@ export class ServerManager {
     }
     
     debugLog('[ServerManager] 尝试重连 WebSocket...');
-    
+
     try {
-      await this.connectWebSocket();
-      
+      await this.connectTransport();
+
       debugLog('[ServerManager] WebSocket 重连成功');
       new Notice(
         t('notices.wsReconnectSuccess') || 'WebSocket 重连成功',
@@ -1016,14 +1008,15 @@ export class ServerManager {
     this.cancelReconnect();
     
     // Close the existing connection
-    if (this.ws) {
-      this.ws.close(1000, 'Manual reconnect');
-      this.ws = null;
+    if (this.transport) {
+      this.transport.close();
+      this.transport = null;
     }
-    
-    // If the server is still running, reconnect the WebSocket directly
+    this.wsConnectPromise = null;
+
+    // If the server is still running, reconnect the transport directly
     if (this.port !== null && this.process !== null) {
-      await this.connectWebSocket();
+      await this.connectTransport();
     } else {
       // Otherwise restart the entire server
       await this.ensureServer();
