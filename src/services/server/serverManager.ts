@@ -947,8 +947,33 @@ export class ServerManager {
 
     this.emit('ws-disconnected');
 
-    // If this was not an intentional shutdown, try to reconnect
-    if (!this.isShuttingDown && this.hasEndpoint()) {
+    if (this.isShuttingDown) {
+      return;
+    }
+
+    // A reused daemon (Part B) - one we discovered rather than spawned, so we
+    // hold no ChildProcess handle and no exit-handler restart - has most likely
+    // exited when its transport drops (a named pipe does not drop transiently
+    // like a socket). Looping reconnect on a pipe we cannot restart would just
+    // exhaust retries and show a "reload plugin" notice. Instead clear the
+    // endpoint and re-run startServer, which re-probes the sidecar: it reattaches
+    // if the daemon is in fact still alive (transient drop) or spawns fresh if
+    // it is gone (B2). This is the proactive-respawn the spawned-daemon exit
+    // handler already provides.
+    if (this.reusedDaemonPid !== null) {
+      debugLog('[ServerManager] 重用的守护进程连接断开，重新探测/启动');
+      this.reusedDaemonPid = null;
+      this.pipePath = null;
+      this.port = null;
+      this.serverStartPromise = null;
+      void this.ensureServer().catch((error) => {
+        errorLog('[ServerManager] 重用守护进程断开后重启失败:', error);
+      });
+      return;
+    }
+
+    // Otherwise (a daemon we spawned) try to reconnect on the same endpoint.
+    if (this.hasEndpoint()) {
       this.scheduleReconnect();
     }
   }
