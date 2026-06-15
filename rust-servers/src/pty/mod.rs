@@ -15,7 +15,7 @@ use crate::pty::replay::ReplayBuffer;
 use crate::transport::{OutMessage, Sender};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use tokio::sync::Mutex as TokioMutex;
+use tokio::sync::{Mutex as TokioMutex, Notify};
 use tokio::time::{self, Duration, Instant};
 use uuid::Uuid;
 
@@ -48,6 +48,18 @@ macro_rules! log_debug {
 /// Past this the oldest bytes are dropped (the buffer flags itself truncated).
 const REPLAY_CAP: usize = 256 * 1024;
 
+/// Wrap PTY output bytes in the client's binary frame:
+/// `[session_id_len: u8][session_id: bytes][data: bytes]`. Used for both live
+/// output and replayed (buffered) output so the client can't tell them apart.
+fn frame_pty_output(session_id: &str, data: &[u8]) -> Vec<u8> {
+    let id = session_id.as_bytes();
+    let mut frame = Vec::with_capacity(1 + id.len() + data.len());
+    frame.push(id.len() as u8);
+    frame.extend_from_slice(id);
+    frame.extend_from_slice(data);
+    frame
+}
+
 /// Context for a single PTY session
 ///
 /// Contains all resources required for one PTY session
@@ -62,6 +74,10 @@ struct PtySessionContext {
     /// task pushes here when the sender slot is `None`; a reattach drains it
     /// (M2 persistence). Shared with the read task.
     replay: Arc<TokioMutex<ReplayBuffer>>,
+    /// Signalled on reattach to wake the read task so it flushes `replay` to the
+    /// new client even when the shell is idle (no PTY output to wake it). Shared
+    /// with the read task.
+    reattach: Arc<Notify>,
 }
 
 impl PtySessionContext {
@@ -75,6 +91,7 @@ impl PtySessionContext {
             writer,
             read_task: None,
             replay: Arc::new(TokioMutex::new(ReplayBuffer::new(REPLAY_CAP))),
+            reattach: Arc::new(Notify::new()),
         }
     }
 }
@@ -185,9 +202,13 @@ impl PtyHandler {
         );
 
         // Start the PTY output reader task. It shares this session's replay
-        // buffer so output produced while detached is retained for reattach.
+        // buffer (output retained while detached) and reattach signal (wakes it
+        // to flush that buffer to a reconnecting client).
         let replay = Arc::clone(&context.replay);
-        let read_task = self.start_read_task(session_id.clone(), pty_reader, pty_writer, shell_type, replay).await?;
+        let reattach = Arc::clone(&context.reattach);
+        let read_task = self
+            .start_read_task(session_id.clone(), pty_reader, pty_writer, shell_type, replay, reattach)
+            .await?;
         context.read_task = Some(read_task);
         
         // Store the session context
@@ -219,6 +240,7 @@ impl PtyHandler {
         _writer: Arc<Mutex<PtyWriter>>,
         _shell_type: Option<String>,
         replay: Arc<TokioMutex<ReplayBuffer>>,
+        reattach: Arc<Notify>,
     ) -> Result<tokio::task::JoinHandle<()>, RouterError> {
         const OUTPUT_BATCH_INTERVAL_MS: u64 = 4;
         const READ_BUFFER_SIZE: usize = 8192;
@@ -271,44 +293,55 @@ impl PtyHandler {
             let mut pending_shell_events: Vec<OscEvent> = Vec::new();
 
             loop {
-                let first_event = match read_rx.recv().await {
-                    Some(event) => event,
-                    None => break,
-                };
-
                 let mut pending_exit = false;
                 let mut pending_error: Option<String> = None;
 
-                match first_event {
-                    ReadEvent::Data(data) => {
-                        pending_shell_events.extend(osc_scanner.scan(&data));
-                        batch_buffer.extend_from_slice(&data);
-                    }
-                    ReadEvent::Eof => pending_exit = true,
-                    ReadEvent::Error(e) => pending_error = Some(e),
-                }
+                // Wait for PTY output OR a reattach signal. A reattach wake
+                // carries no data: it just makes the loop fall through to the
+                // flush step so buffered output reaches a reconnecting client
+                // even when the shell is idle. `biased` drains real output first.
+                let first_event = tokio::select! {
+                    biased;
+                    ev = read_rx.recv() => match ev {
+                        Some(event) => Some(event),
+                        None => break,
+                    },
+                    _ = reattach.notified() => None,
+                };
 
-                if pending_error.is_none() && !pending_exit {
-                    let deadline = Instant::now() + Duration::from_millis(OUTPUT_BATCH_INTERVAL_MS);
-                    loop {
-                        match time::timeout_at(deadline, read_rx.recv()).await {
-                            Ok(Some(ReadEvent::Data(data))) => {
-                                pending_shell_events.extend(osc_scanner.scan(&data));
-                                batch_buffer.extend_from_slice(&data);
-                            }
-                            Ok(Some(ReadEvent::Eof)) => {
-                                pending_exit = true;
-                                break;
-                            }
-                            Ok(Some(ReadEvent::Error(e))) => {
-                                pending_error = Some(e);
-                                break;
-                            }
-                            Ok(None) => {
-                                break;
-                            }
-                            Err(_) => {
-                                break;
+                if let Some(event) = first_event {
+                    match event {
+                        ReadEvent::Data(data) => {
+                            pending_shell_events.extend(osc_scanner.scan(&data));
+                            batch_buffer.extend_from_slice(&data);
+                        }
+                        ReadEvent::Eof => pending_exit = true,
+                        ReadEvent::Error(e) => pending_error = Some(e),
+                    }
+
+                    if pending_error.is_none() && !pending_exit {
+                        let deadline =
+                            Instant::now() + Duration::from_millis(OUTPUT_BATCH_INTERVAL_MS);
+                        loop {
+                            match time::timeout_at(deadline, read_rx.recv()).await {
+                                Ok(Some(ReadEvent::Data(data))) => {
+                                    pending_shell_events.extend(osc_scanner.scan(&data));
+                                    batch_buffer.extend_from_slice(&data);
+                                }
+                                Ok(Some(ReadEvent::Eof)) => {
+                                    pending_exit = true;
+                                    break;
+                                }
+                                Ok(Some(ReadEvent::Error(e))) => {
+                                    pending_error = Some(e);
+                                    break;
+                                }
+                                Ok(None) => {
+                                    break;
+                                }
+                                Err(_) => {
+                                    break;
+                                }
                             }
                         }
                     }
@@ -319,67 +352,92 @@ impl PtyHandler {
                 // `None` we are detached and retain output for replay (M2).
                 let current_sender = { sender_slot.lock().await.clone() };
 
-                if !batch_buffer.is_empty() {
-                    log_debug!(
-                        "读取 PTY 输出(批处理): session_id={}, {} 字节",
-                        session_id,
-                        batch_buffer.len()
-                    );
-
-                    match &current_sender {
-                        Some(sender) => {
-                            // Build a binary frame prefixed with the session_id
-                            // Format: [session_id_length: u8][session_id: bytes][data: bytes]
-                            let session_id_bytes = session_id.as_bytes();
-                            let session_id_len = session_id_bytes.len() as u8;
-
-                            let mut frame =
-                                Vec::with_capacity(1 + session_id_bytes.len() + batch_buffer.len());
-                            frame.push(session_id_len);
-                            frame.extend_from_slice(session_id_bytes);
-                            frame.extend_from_slice(&batch_buffer);
-
+                match &current_sender {
+                    Some(sender) => {
+                        // Attached. Flush any output buffered while detached
+                        // FIRST, then this batch. The read task is the single
+                        // writer to the sink, so draining here guarantees the
+                        // client sees missed bytes ahead of live output, in
+                        // order. `attached` stays false until the flush lands so
+                        // a mid-flush disconnect re-buffers without reordering.
+                        let buffered = {
+                            let mut b = replay.lock().await;
+                            if b.is_empty() {
+                                Vec::new()
+                            } else {
+                                let snapshot = b.snapshot();
+                                b.clear();
+                                snapshot
+                            }
+                        };
+                        let mut attached = true;
+                        if !buffered.is_empty() {
+                            let frame = frame_pty_output(&session_id, &buffered);
                             if let Err(e) = sender.send(OutMessage::Binary(frame)).await {
-                                // The socket died mid-batch (detach not yet
-                                // processed). Don't drop the output or kill the
-                                // task — retain it so the reattach can replay it.
-                                log_error!(
-                                    "发送 PTY 输出失败,缓存以待重连: session_id={}, {}",
-                                    session_id,
-                                    e
-                                );
+                                log_error!("重放缓存失败,保留以待下次重连: session_id={}, {}", session_id, e);
+                                replay.lock().await.push(&buffered);
+                                attached = false;
+                            }
+                        }
+
+                        if !batch_buffer.is_empty() {
+                            log_debug!(
+                                "读取 PTY 输出(批处理): session_id={}, {} 字节",
+                                session_id,
+                                batch_buffer.len()
+                            );
+                            if attached {
+                                let frame = frame_pty_output(&session_id, &batch_buffer);
+                                if let Err(e) = sender.send(OutMessage::Binary(frame)).await {
+                                    // The socket died mid-batch. Don't drop the
+                                    // output or kill the task — retain it for the
+                                    // next reattach to replay.
+                                    log_error!(
+                                        "发送 PTY 输出失败,缓存以待重连: session_id={}, {}",
+                                        session_id,
+                                        e
+                                    );
+                                    replay.lock().await.push(&batch_buffer);
+                                    attached = false;
+                                }
+                            } else {
+                                // Flush already failed (sender gone): buffer this
+                                // batch after the re-buffered bytes, order intact.
                                 replay.lock().await.push(&batch_buffer);
                             }
                         }
-                        None => {
-                            // Detached: no client. Retain output for replay.
-                            replay.lock().await.push(&batch_buffer);
+
+                        if attached && !pending_shell_events.is_empty() {
+                            for event in pending_shell_events.drain(..) {
+                                let event_payload = serde_json::json!({
+                                    "session_id": session_id,
+                                    "event": event.event_name(),
+                                    "source": event.source_name(),
+                                    "exit_code": event.exit_code(),
+                                });
+                                let response = ServerResponse::new(
+                                    ModuleType::Pty,
+                                    "shell_event",
+                                    event_payload,
+                                );
+                                if let Err(e) =
+                                    sender.send(OutMessage::Text(response.to_json())).await
+                                {
+                                    log_error!("发送 shell_event 失败: session_id={}, {}", session_id, e);
+                                    break;
+                                }
+                            }
+                        } else {
+                            // Detached mid-flush: drop shell events (re-emitted
+                            // by the next prompt).
+                            pending_shell_events.clear();
                         }
                     }
-                }
-
-                if !pending_shell_events.is_empty() {
-                    if let Some(sender) = &current_sender {
-                        for event in pending_shell_events.drain(..) {
-                            let event_payload = serde_json::json!({
-                                "session_id": session_id,
-                                "event": event.event_name(),
-                                "source": event.source_name(),
-                                "exit_code": event.exit_code(),
-                            });
-                            let response = ServerResponse::new(
-                                ModuleType::Pty,
-                                "shell_event",
-                                event_payload,
-                            );
-                            if let Err(e) = sender.send(OutMessage::Text(response.to_json())).await {
-                                log_error!("发送 shell_event 失败: session_id={}, {}", session_id, e);
-                                break;
-                            }
+                    None => {
+                        // Detached: no client. Retain output; drop shell events.
+                        if !batch_buffer.is_empty() {
+                            replay.lock().await.push(&batch_buffer);
                         }
-                    } else {
-                        // Detached: shell events (cwd/title hints) are re-emitted
-                        // by the next prompt, so dropping them is safe.
                         pending_shell_events.clear();
                     }
                 }
@@ -434,6 +492,61 @@ impl PtyHandler {
         Ok(None) // resize does not require a response
     }
     
+    /// Re-attach a reconnecting client to an existing session.
+    ///
+    /// No PTY is spawned: the session kept running while detached. This validates
+    /// the session still exists (it may have been reaped by the orphan timeout)
+    /// and wakes the read task to flush the session's replay buffer to the now-
+    /// current client, ahead of live output. The actual replay bytes travel on
+    /// the normal binary-output path (the read task is the single writer, so
+    /// ordering is preserved); this only reports whether the replay was partial.
+    async fn handle_reattach(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<ServerResponse>, RouterError> {
+        // Clone the per-session handles out before touching the buffer, so we
+        // never hold the sessions lock while locking replay (lock-order safety).
+        let (notify, replay) = {
+            let sessions = self.sessions.lock().await;
+            let context = sessions
+                .get(session_id)
+                .ok_or_else(|| RouterError::ModuleError(format!("SESSION_NOT_FOUND: {}", session_id)))?;
+            (Arc::clone(&context.reattach), Arc::clone(&context.replay))
+        };
+
+        // Advisory snapshot at request time: the actual drain happens in the
+        // read task, so a few ms of live output may land between here and the
+        // flush. The client treats these as hints, not guarantees. (Surfacing
+        // `truncated` on the drained frame itself is deferred to S6, where the
+        // TS client decides how to react to a lossy replay.)
+        let (replay_bytes, truncated) = {
+            let buf = replay.lock().await;
+            (buf.len(), buf.truncated())
+        };
+
+        // Wake the read task to drain the buffer to the new client even if the
+        // shell is idle. The read task does the send (single writer).
+        notify.notify_one();
+
+        log_info!(
+            "重新连接会话: session_id={}, 待重放 {} 字节 (truncated={})",
+            session_id,
+            replay_bytes,
+            truncated
+        );
+
+        Ok(Some(ServerResponse::new(
+            ModuleType::Pty,
+            "reattach_complete",
+            serde_json::json!({
+                "success": true,
+                "session_id": session_id,
+                "replay_bytes": replay_bytes,
+                "truncated": truncated,
+            }),
+        )))
+    }
+
     /// Write data to the PTY for the specified session
     pub async fn write_data(&self, session_id: &str, data: &[u8]) -> Result<(), RouterError> {
         let sessions = self.sessions.lock().await;
@@ -527,6 +640,15 @@ impl ModuleHandler for PtyHandler {
                 let rows: Option<u16> = msg.get_field("rows");
                 
                 self.handle_init(shell_type, shell_args, cwd, env, cols, rows).await
+            }
+            "reattach" => {
+                // reattach requires a session_id
+                let session_id: Option<String> = msg.get_field("session_id");
+                let session_id = session_id.ok_or_else(|| {
+                    RouterError::ModuleError("SESSION_ID_REQUIRED".to_string())
+                })?;
+
+                self.handle_reattach(&session_id).await
             }
             "resize" => {
                 // resize requires a session_id
@@ -706,6 +828,93 @@ mod tests {
             );
             sleep(Duration::from_millis(50)).await;
         }
+
+        handler.handle_destroy(&session_id).await.ok();
+    }
+
+    /// S4 deliverable: a client that reconnects and sends `reattach` for an
+    /// existing session receives the output produced while it was detached
+    /// (drained from the replay buffer), with no new PTY spawned.
+    #[tokio::test]
+    async fn buffered_output_is_replayed_to_a_reattached_client() {
+        let handler = PtyHandler::new();
+
+        let sink1: Sender = Arc::new(CollectSink::default());
+        handler.set_sender(sink1).await;
+        handler
+            .handle_init(Some("cmd".into()), None, None, None, Some(80), Some(24))
+            .await
+            .expect("init session");
+        let session_id = only_session_id(&handler).await;
+
+        // Detach, then produce a marked line while no client is attached.
+        handler.detach().await;
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let mut answered = 0usize;
+        let mut sent = false;
+        loop {
+            let snap = handler
+                .test_replay_snapshot(&session_id)
+                .await
+                .expect("session present");
+            if contains(&snap, b"REPLAY_MARK") {
+                break;
+            }
+            answered = answer_cursor_queries(&handler, &session_id, &snap, answered).await;
+            if !sent && answered > 0 {
+                handler
+                    .write_data(&session_id, b"echo REPLAY_MARK\r\n")
+                    .await
+                    .expect("write while detached");
+                sent = true;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "marker never buffered; buffer={:?}",
+                String::from_utf8_lossy(&snap)
+            );
+            sleep(Duration::from_millis(50)).await;
+        }
+
+        // Reconnect a new client and reattach by session_id (no respawn).
+        let sink2 = Arc::new(CollectSink::default());
+        handler.set_sender(sink2.clone()).await;
+        let resp = handler
+            .handle_reattach(&session_id)
+            .await
+            .expect("reattach ok")
+            .expect("reattach response");
+        assert!(
+            resp.to_json().contains("reattach_complete"),
+            "unexpected reattach reply: {}",
+            resp.to_json()
+        );
+
+        // The buffered output must be replayed to the reconnected client.
+        let deadline = Instant::now() + Duration::from_secs(20);
+        loop {
+            let got = sink2.binary.lock().unwrap().clone();
+            if contains(&got, b"REPLAY_MARK") {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "replay was not delivered to the reattached client; got={:?}",
+                String::from_utf8_lossy(&got)
+            );
+            sleep(Duration::from_millis(50)).await;
+        }
+
+        // The buffer is drained after replay (not re-sent on a later reattach).
+        let after = handler
+            .test_replay_snapshot(&session_id)
+            .await
+            .expect("session present");
+        assert!(
+            !contains(&after, b"REPLAY_MARK"),
+            "replay buffer was not drained: {:?}",
+            String::from_utf8_lossy(&after)
+        );
 
         handler.handle_destroy(&session_id).await.ok();
     }
