@@ -32,17 +32,20 @@ import { BinaryDownloader } from './binaryDownloader';
 import type { BinaryDownloadConfig } from './binaryDownloadUrls';
 import type { Transport, TransportMessage, SocketConnector } from './transport.ts';
 import { WebSocketTransport, PipeTransport } from './transport.ts';
+import type { DaemonRecord } from './daemonRecord.ts';
+import { PIPE_NAME_RE, serializeDaemonRecord } from './daemonRecord.ts';
 
 type BinaryUpdateResult = 'skipped-offline' | 'already-ready' | 'downloaded' | 'updated';
 const DEV_RELOAD_REQUEST_FILE = '.termy-dev-reload.json';
 
 /**
- * Shape the server's announced pipe path must match before the client will
- * connect to it: `\\.\pipe\termy-<uuid>`. Defense in depth - the path comes
- * from our own child's stdout, but validating it means a tampered or buggy
- * server cannot steer the client at an arbitrary (foreign) pipe.
+ * Sidecar file recording the running daemon's pipe + pid + version so a
+ * reloaded plugin can re-discover it (M2 Part B). `PIPE_NAME_RE` is shared with
+ * `daemonRecord.ts` - the announced stdout pipe and a persisted record are
+ * validated by the exact same rule, so a tampered sidecar cannot steer the
+ * client at a foreign pipe.
  */
-const PIPE_NAME_RE = /^\\\\\.\\pipe\\termy-[0-9a-f-]{36}$/i;
+const DAEMON_RECORD_FILE = '.termy-daemon.json';
 const DEV_RELOAD_PHASE_INSTALLING = 'installing';
 
 interface ServerExitDetails {
@@ -277,6 +280,11 @@ export class ServerManager {
       }
     }
     
+    // The daemon was killed above, so its sidecar record is now stale - remove
+    // it so a reloaded plugin does not probe a dead pipe (Part B keeps the
+    // daemon alive on reload; an explicit shutdown still means "gone").
+    this.clearDaemonRecord();
+
     // Clear state
     this.port = null;
     this.pipePath = null;
@@ -390,8 +398,13 @@ export class ServerManager {
           TERM: process.env.TERM || 'xterm-256color',
         },
         windowsHide: true,
-        detached: false,
+        // Detached + unref so the daemon is not bound to the renderer's process
+        // group and the parent's event loop does not stay alive waiting on it.
+        // The teardown path still kills it (Part B B3 changes that to keep it
+        // alive across a reload); detaching now is the lifecycle prerequisite.
+        detached: true,
       });
+      this.process.unref();
 
       debugLog('[ServerManager] 服务器进程已启动, PID:', this.process.pid);
 
@@ -406,6 +419,15 @@ export class ServerManager {
       if (info.pipe) {
         this.pipePath = info.pipe;
         debugLog(`[ServerManager] 服务器已启动，命名管道: ${info.pipe}`);
+        // Record the live daemon so a reloaded plugin can re-discover it (Part B).
+        // Only the pipe transport carries a daemon worth re-discovering; the WS
+        // fallback has no persistence story until UDS (M3).
+        this.writeDaemonRecord({
+          pipe: info.pipe,
+          pid: this.process.pid ?? 0,
+          binaryVersion: this.version,
+          startedAt: new Date().toISOString(),
+        });
       } else {
         this.port = info.port ?? null;
         debugLog(`[ServerManager] 服务器已启动，端口: ${info.port}`);
@@ -661,6 +683,49 @@ export class ServerManager {
       return new WebSocketTransport(wsUrl);
     }
     return null;
+  }
+
+  /** Absolute path of the daemon sidecar record. */
+  private getDaemonRecordPath(): string {
+    return this.path.join(this.pluginDir, DAEMON_RECORD_FILE);
+  }
+
+  /**
+   * Persist the daemon record atomically (write a temp file, then rename) so a
+   * crash mid-write can never leave a half-written record that `parseDaemonRecord`
+   * would reject anyway. Best-effort: a failure here only costs us re-discovery,
+   * not correctness (the plugin spawns fresh next load).
+   */
+  private writeDaemonRecord(record: DaemonRecord): void {
+    const finalPath = this.getDaemonRecordPath();
+    const tempPath = `${finalPath}.${process.pid}.tmp`;
+    try {
+      this.fs.writeFileSync(tempPath, serializeDaemonRecord(record), 'utf8');
+      this.fs.renameSync(tempPath, finalPath);
+      debugLog('[ServerManager] 已写入守护进程记录:', finalPath);
+    } catch (error) {
+      debugWarn('[ServerManager] 写入守护进程记录失败:', error);
+      try {
+        if (this.fs.existsSync(tempPath)) {
+          this.fs.unlinkSync(tempPath);
+        }
+      } catch {
+        /* nothing more to do */
+      }
+    }
+  }
+
+  /** Remove the daemon record, if present. Best-effort. */
+  private clearDaemonRecord(): void {
+    try {
+      const recordPath = this.getDaemonRecordPath();
+      if (this.fs.existsSync(recordPath)) {
+        this.fs.unlinkSync(recordPath);
+        debugLog('[ServerManager] 已删除守护进程记录');
+      }
+    } catch (error) {
+      debugWarn('[ServerManager] 删除守护进程记录失败:', error);
+    }
   }
 
   /**
