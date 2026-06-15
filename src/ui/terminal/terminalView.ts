@@ -1,4 +1,4 @@
-import type { WorkspaceLeaf, Menu } from 'obsidian';
+import type { WorkspaceLeaf, Menu, ViewStateResult } from 'obsidian';
 import { FileSystemAdapter, ItemView, Notice, TFile, TFolder, setIcon } from 'obsidian';
 import { shell, webUtils } from 'electron';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -71,6 +71,8 @@ export class TerminalView extends ItemView {
   private initPromise: Promise<TerminalInstance> | null = null;
   private initResolve: ((terminal: TerminalInstance) => void) | null = null;
   private initReject: ((error: Error) => void) | null = null;
+  /** Session id restored from view state, used to reattach across a reload (Part B). */
+  private restoredSessionId: string | null = null;
 
   private readonly fs: FsModule;
   private readonly path: PathModule;
@@ -87,6 +89,35 @@ export class TerminalView extends ItemView {
   }
 
   getViewType(): string { return TERMINAL_VIEW_TYPE; }
+
+  /**
+   * Persist the live daemon session id into workspace state so a reload can
+   * reattach to the same shell (M2 Part B). Falls back to the last restored id
+   * if the instance is gone (e.g. state is read after teardown begins).
+   */
+  getState(): Record<string, unknown> {
+    const state = super.getState();
+    const sessionId = this.terminalInstance?.getSessionId() ?? this.restoredSessionId;
+    if (sessionId) {
+      state.sessionId = sessionId;
+    }
+    return state;
+  }
+
+  /**
+   * Restore the session id from workspace state. Stored for `initializeTerminal`
+   * to prefer a reattach over a fresh spawn. Obsidian calls this around view
+   * load; `onOpen` defers init by a macrotask so this lands first in practice.
+   */
+  async setState(state: unknown, result: ViewStateResult): Promise<void> {
+    if (state && typeof state === 'object' && 'sessionId' in state) {
+      const sessionId = (state as { sessionId?: unknown }).sessionId;
+      if (typeof sessionId === 'string' && sessionId) {
+        this.restoredSessionId = sessionId;
+      }
+    }
+    await super.setState(state, result);
+  }
 
   getDisplayText(): string {
     return this.terminalInstance?.getTitle() || t('terminal.defaultTitle');
@@ -334,7 +365,12 @@ export class TerminalView extends ItemView {
         throw new Error('TerminalService not initialized');
       }
 
-      this.terminalInstance = await this.terminalService.createTerminal();
+      // Prefer reattaching to a session restored from view state (reload
+      // survival). Consume it so a later re-init (e.g. after the user closes
+      // and the leaf reopens) spawns fresh rather than chasing a stale id.
+      const restoreSessionId = this.restoredSessionId ?? undefined;
+      this.restoredSessionId = null;
+      this.terminalInstance = await this.terminalService.createTerminal(restoreSessionId);
       this.initResolve?.(this.terminalInstance);
       this.initResolve = null;
       this.initReject = null;

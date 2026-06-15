@@ -183,7 +183,7 @@ export class TerminalService {
    * @returns The created terminal instance
    * @throws Error if terminal creation fails
    */
-  async createTerminal(): Promise<TerminalInstance> {
+  async createTerminal(restoreSessionId?: string): Promise<TerminalInstance> {
     try {
       // Ensure the server is running
       await this.serverManager.ensureServer();
@@ -240,9 +240,10 @@ export class TerminalService {
         textOpacity: this.settings.textOpacity,
       });
       
-      // Initialize the terminal through ServerManager
-      await terminal.initializeWithServerManager(this.serverManager);
-      
+      // Initialize the terminal through ServerManager (reattaching to a restored
+      // session id when one survived a reload).
+      await terminal.initializeWithServerManager(this.serverManager, restoreSessionId);
+
       this.terminals.set(terminal.id, terminal);
       
       return terminal;
