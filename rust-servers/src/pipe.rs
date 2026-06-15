@@ -98,8 +98,18 @@ pub async fn serve(pipe_name: &str) -> Result<(), Box<dyn std::error::Error + Se
         tokio::select! {
             biased;
             _ = shutdown.notified() => {
-                log_info!("no sessions and no client; daemon exiting");
-                return Ok(());
+                // The signal is ADVISORY: `notify_one` leaves a permit that can
+                // outlive the instant it was meant for. A client can reconnect
+                // and repopulate sessions in the narrow connect->set_sender
+                // window at reaper time, so re-check the authoritative state and
+                // only exit when the registry is genuinely empty - otherwise a
+                // stale permit would kill live, reattach-eligible shells.
+                if router.pty_handler().session_count().await == 0 {
+                    log_info!("no sessions and no client; daemon exiting");
+                    return Ok(());
+                }
+                log_info!("idle signal but sessions remain; continuing to serve");
+                continue;
             }
             res = server.connect() => res?,
         }
