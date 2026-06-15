@@ -971,7 +971,16 @@ export class TerminalInstance {
     }
   }
 
-  destroy(): void {
+  /**
+   * Tear down the renderer-side terminal.
+   *
+   * @param keepSession When true, the daemon-side PTY session is NOT destroyed -
+   *   only the local xterm / handlers are disposed. Used on plugin unload for
+   *   reload survival (M2 Part B): the session stays alive on the daemon so a
+   *   reloaded view can reattach to it by `sessionId`. Default false = the user
+   *   closed the terminal, so kill the shell.
+   */
+  destroy(keepSession = false): void {
     if (this.isDestroyed) return;
     this.isDestroyed = true;
 
@@ -986,8 +995,8 @@ export class TerminalInstance {
     }
     this.parserDisposables = [];
 
-    // Destroy the PTY session
-    if (this.ptyClient && this.sessionId) {
+    // Destroy the PTY session - unless we are keeping it alive for reattach.
+    if (!keepSession && this.ptyClient && this.sessionId) {
       this.ptyClient.destroySession(this.sessionId);
     }
 

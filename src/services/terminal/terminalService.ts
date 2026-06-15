@@ -317,13 +317,17 @@ export class TerminalService {
 
   /**
    * Destroy all terminal instances
+   *
+   * @param keepSessions When true, the daemon-side PTY sessions are left alive
+   *   (only the local renderers are disposed) so they can be reattached after a
+   *   reload (M2 Part B). Default false = kill the shells.
    */
-  destroyAllTerminals(): void {
+  destroyAllTerminals(keepSessions = false): void {
     const failedTerminals: string[] = [];
 
     for (const [id, terminal] of this.terminals.entries()) {
       try {
-        terminal.destroy();
+        terminal.destroy(keepSessions);
       } catch (error) {
         errorLog(`[TerminalService] 销毁终端 ${id} 失败:`, error);
         failedTerminals.push(id);
@@ -376,22 +380,27 @@ export class TerminalService {
   }
 
   /**
-   * Shut down the service (called when the plugin unloads)
+   * Shut down the service (called when the plugin unloads).
+   *
+   * @param keepAlive When true, terminal sessions and the daemon are left
+   *   running so they survive an Obsidian reload (M2 Part B); only the local
+   *   renderers and the transport are torn down. When false (default), shells
+   *   are killed and the daemon is stopped.
    */
-  async shutdown(): Promise<void> {
+  async shutdown(keepAlive = false): Promise<void> {
     this.isShuttingDown = true;
-    
-    debugLog('[TerminalService] 开始关闭终端服务');
-    
-    // Destroy all terminals
-    this.destroyAllTerminals();
-    
-    // Ensure the server is stopped
+
+    debugLog(`[TerminalService] 开始关闭终端服务 (keepAlive=${keepAlive})`);
+
+    // Destroy all terminals (keeping the daemon sessions alive when reload-surviving)
+    this.destroyAllTerminals(keepAlive);
+
+    // Stop, or merely detach from, the server.
     if (this.serverManager.isServerRunning()) {
       debugLog('[TerminalService] 停止服务器');
-      await this.serverManager.shutdown();
+      await this.serverManager.shutdown(!keepAlive);
     }
-    
+
     debugLog('[TerminalService] 终端服务已关闭');
   }
 }

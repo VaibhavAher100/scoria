@@ -2004,6 +2004,22 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
             });
         }));
 
+    // Keep server alive on unload (reload survival)
+    new Setting(containerEl)
+      .setName('Keep terminal server running on reload')
+      .setDesc(
+        'Leave the native terminal server running when the plugin reloads so ' +
+        'sessions survive an Obsidian reload and reattach. Turn off to stop the ' +
+        'server on every unload. Use the "Stop terminal server" command to stop ' +
+        'it immediately.'
+      )
+      .addToggle(toggle => toggle
+        .setValue(settings.serverConnection.keepServerAliveOnUnload !== false)
+        .onChange((value) => {
+          settings.serverConnection.keepServerAliveOnUnload = value;
+          void this.saveSettings();
+        }));
+
     // Reset button
     new Setting(containerEl)
       .setName(t('settingsDetails.advanced.resetToDefaults'))

@@ -240,19 +240,26 @@ export class ServerManager {
   }
 
   /**
-   * Shut down the server
-   * 
-
+   * Shut down the server.
+   *
+   * @param killDaemon When true (default), the native daemon is terminated and
+   *   its sidecar record cleared. When false, the daemon is left running and the
+   *   record is kept - the transport is dropped (which triggers the daemon's
+   *   `detach()`, keeping sessions alive behind the orphan timer) so a reloaded
+   *   plugin can re-discover and reattach (M2 Part B reload survival).
    */
-  async shutdown(): Promise<void> {
+  async shutdown(killDaemon = true): Promise<void> {
     this.isShuttingDown = true;
-    
-    debugLog('[ServerManager] 关闭服务器...');
-    
+
+    debugLog(`[ServerManager] 关闭服务器... (killDaemon=${killDaemon})`);
+
     // Cancel the reconnect timer
     this.cancelReconnect();
-    
-    // Close the transport connection
+
+    // Close the transport connection. On a keep-alive shutdown this is the ONLY
+    // thing we do to the daemon: dropping the socket triggers its detach() so the
+    // PTY sessions stay alive (the orphan timer reaps them only if no reattach
+    // arrives in time).
     if (this.transport) {
       try {
         this.transport.close();
@@ -261,12 +268,19 @@ export class ServerManager {
       }
       this.transport = null;
     }
-    
-    // Stop the server process
-    if (this.process) {
+
+    if (!killDaemon) {
+      // Leave the daemon running and its record intact for re-discovery. Drop
+      // our handle without signalling (detached + unref means the renderer can
+      // exit without waiting on it).
+      this.process = null;
+      this.reusedDaemonPid = null;
+      debugLog('[ServerManager] 守护进程保持运行（重载存活）');
+    } else if (this.process) {
+      // Stop the server process
       try {
         this.process.kill('SIGTERM');
-        
+
         // Wait for the process to exit
         await new Promise<void>((resolve) => {
           const timeout = window.setTimeout(() => {
@@ -291,15 +305,14 @@ export class ServerManager {
       }
     } else if (this.reusedDaemonPid !== null) {
       // A daemon we reused (not spawned) has no ChildProcess handle - kill by pid.
-      // (Part B B3 makes reload keep it alive; an explicit shutdown still stops it.)
       this.killByPid(this.reusedDaemonPid);
     }
-    this.reusedDaemonPid = null;
-
-    // The daemon was killed above, so its sidecar record is now stale - remove
-    // it so a reloaded plugin does not probe a dead pipe (Part B keeps the
-    // daemon alive on reload; an explicit shutdown still means "gone").
-    this.clearDaemonRecord();
+    if (killDaemon) {
+      this.reusedDaemonPid = null;
+      // The daemon was killed above, so its sidecar record is now stale - remove
+      // it so a reloaded plugin does not probe a dead pipe.
+      this.clearDaemonRecord();
+    }
 
     // Clear state
     this.port = null;
