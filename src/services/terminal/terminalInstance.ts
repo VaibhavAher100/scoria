@@ -531,22 +531,41 @@ export class TerminalInstance {
    * 
 
    */
-  async initializeWithServerManager(serverManager: ServerManager): Promise<void> {
+  async initializeWithServerManager(
+    serverManager: ServerManager,
+    restoreSessionId?: string,
+  ): Promise<void> {
     if (this.isInitialized || this.isDestroyed) return;
 
     try {
       // Load xterm.js modules dynamically
       await this.initXterm();
-      
+
       // Ensure the server is running
       await serverManager.ensureServer();
-      
-      await this.initializePtySession(serverManager, this.options.cwd);
+
+      // Reload survival (M2 Part B): if a sessionId was restored from view
+      // state, try to reattach to that still-live daemon session instead of
+      // spawning a fresh shell. On any failure (e.g. SESSION_NOT_FOUND because
+      // the orphan reaper already killed it, or a fresh daemon) fall back to a
+      // brand-new session.
+      if (restoreSessionId) {
+        try {
+          await this.reattachPtySession(serverManager, restoreSessionId);
+        } catch (error) {
+          if (this.isDestroyed) return;
+          debugWarn('[Terminal] 恢复会话失败，改为新建会话:', error);
+          this.disposePtyClientHandlers();
+          await this.initializePtySession(serverManager, this.options.cwd);
+        }
+      } else {
+        await this.initializePtySession(serverManager, this.options.cwd);
+      }
       if (this.isDestroyed) return;
-      
+
       this.setupXtermHandlers();
       this.isInitialized = true;
-      
+
       debugLog('[Terminal] 终端已初始化');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -971,7 +990,16 @@ export class TerminalInstance {
     }
   }
 
-  destroy(): void {
+  /**
+   * Tear down the renderer-side terminal.
+   *
+   * @param keepSession When true, the daemon-side PTY session is NOT destroyed -
+   *   only the local xterm / handlers are disposed. Used on plugin unload for
+   *   reload survival (M2 Part B): the session stays alive on the daemon so a
+   *   reloaded view can reattach to it by `sessionId`. Default false = the user
+   *   closed the terminal, so kill the shell.
+   */
+  destroy(keepSession = false): void {
     if (this.isDestroyed) return;
     this.isDestroyed = true;
 
@@ -986,8 +1014,8 @@ export class TerminalInstance {
     }
     this.parserDisposables = [];
 
-    // Destroy the PTY session
-    if (this.ptyClient && this.sessionId) {
+    // Destroy the PTY session - unless we are keeping it alive for reattach.
+    if (!keepSession && this.ptyClient && this.sessionId) {
       this.ptyClient.destroySession(this.sessionId);
     }
 
@@ -2139,6 +2167,9 @@ export class TerminalInstance {
   }
 
   getXterm(): Terminal { return this.xterm; }
+  /** The daemon session id, or null before init / after destroy. Used by the
+   *  view to persist + restore the session across an Obsidian reload (Part B). */
+  getSessionId(): string | null { return this.sessionId; }
   getFitAddon(): FitAddon { return this.fitAddon; }
   getSearchAddon(): SearchAddon { return this.searchAddon; }
 

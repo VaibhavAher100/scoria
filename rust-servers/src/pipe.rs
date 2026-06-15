@@ -81,6 +81,7 @@ impl MessageSink for PipeSink {
 /// M2 single-session MVP).
 pub async fn serve(pipe_name: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let router = Arc::new(MessageRouter::new());
+    let shutdown = router.pty_handler().shutdown_signal();
 
     let mut first_instance = true;
     loop {
@@ -88,13 +89,40 @@ pub async fn serve(pipe_name: &str) -> Result<(), Box<dyn std::error::Error + Se
         first_instance = false;
 
         log_info!("listening: {}", pipe_name);
-        server.connect().await?;
+
+        // Await the next client, but bail if the orphan reaper has meanwhile
+        // killed the last session with no client attached — there is then
+        // nothing left to serve, so the daemon exits instead of accepting
+        // forever (B5 no-zombie backstop). `biased` checks shutdown first so a
+        // pending signal always wins over a just-arriving connection.
+        tokio::select! {
+            biased;
+            _ = shutdown.notified() => {
+                // The signal is ADVISORY: `notify_one` leaves a permit that can
+                // outlive the instant it was meant for. A client can reconnect
+                // and repopulate sessions in the narrow connect->set_sender
+                // window at reaper time, so re-check the authoritative state and
+                // only exit when the registry is genuinely empty - otherwise a
+                // stale permit would kill live, reattach-eligible shells.
+                if router.pty_handler().session_count().await == 0 {
+                    log_info!("no sessions and no client; daemon exiting");
+                    return Ok(());
+                }
+                log_info!("idle signal but sessions remain; continuing to serve");
+                continue;
+            }
+            res = server.connect() => res?,
+        }
         log_info!("client connected");
 
         serve_connection(server, &router).await?;
 
         // The client is gone. Detach (clear the sender) but keep the sessions
         // alive for reconnect; loop to accept the next client on the same name.
+        // detach() arms the orphan timer; if no client returns before it fires,
+        // the reaper drains the sessions (even an already-empty registry) and
+        // signals `shutdown`, so the select above exits the daemon then. A
+        // reconnect within the window bumps the attach epoch and cancels it.
         router.detach().await;
         log_info!("client detached; awaiting reconnect");
     }

@@ -163,6 +163,14 @@ export interface PresetScript {
 export interface ServerConnectionSettings {
   binaryDownloadSource: BinaryDownloadSource;
   offlineMode: boolean;
+
+  // When true (default), the native server daemon is left running when the
+  // plugin unloads so terminal sessions survive an Obsidian reload; a reloaded
+  // plugin re-discovers and reattaches to it. When false, the daemon is killed
+  // on unload (old behavior). Obsidian cannot distinguish a reload from a
+  // disable, so the default keeps sessions; an abandoned daemon self-cleans via
+  // the orphan timeout. Use the "Stop terminal server" command to stop it now.
+  keepServerAliveOnUnload: boolean;
 }
 
 /**
@@ -171,6 +179,7 @@ export interface ServerConnectionSettings {
 export const DEFAULT_SERVER_CONNECTION_SETTINGS: ServerConnectionSettings = {
   binaryDownloadSource: 'cloudflare-r2',
   offlineMode: false,
+  keepServerAliveOnUnload: true,
 };
 
 /**

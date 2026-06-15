@@ -265,6 +265,13 @@ export default class TerminalPlugin extends Plugin {
   private async handleUnload(): Promise<void> {
     debugLog(t('plugin.unloadingMessage'));
 
+    // Reload survival (M2 Part B): unless the user opted into kill-on-unload,
+    // leave the daemon + sessions running so a reload re-discovers and reattaches.
+    // Obsidian cannot tell a reload from a disable, so we default to keep-alive;
+    // an abandoned daemon self-cleans via the orphan timeout, and the "Stop
+    // terminal server" command stops it explicitly.
+    const keepAlive = this.settings?.serverConnection?.keepServerAliveOnUnload ?? true;
+
     // Stop any in-flight launcher upgrade watchdogs so their poll
     // timers do not outlive the plugin lifecycle.
     for (const presetId of this._upgradeWatchdogTimers.keys()) {
@@ -282,18 +289,18 @@ export default class TerminalPlugin extends Plugin {
     if (this._terminalService) {
       try {
         debugLog('[TerminalPlugin] Shutting down TerminalService...');
-        await this._terminalService.shutdown();
+        await this._terminalService.shutdown(keepAlive);
         debugLog('[TerminalPlugin] TerminalService stopped');
       } catch (error) {
         errorLog('[TerminalPlugin] Failed to shutdown TerminalService:', error);
       }
     }
 
-    // Stop the server
+    // Stop (or, on reload survival, merely detach from) the server.
     if (this._serverManager) {
       try {
         debugLog('[TerminalPlugin] Shutting down ServerManager...');
-        await this._serverManager.shutdown();
+        await this._serverManager.shutdown(!keepAlive);
         debugLog('[TerminalPlugin] ServerManager stopped');
       } catch (error) {
         errorLog('[TerminalPlugin] Failed to stop ServerManager:', error);
@@ -988,6 +995,24 @@ export default class TerminalPlugin extends Plugin {
       name: t('commands.showChangelog'),
       callback: () => {
         this.showChangelog();
+      },
+    });
+
+    // Explicitly stop the native server daemon. Useful when keep-alive-on-unload
+    // is on (the default) and the user wants to terminate the kept-alive daemon
+    // and its sessions now, rather than waiting for the orphan timeout.
+    this.addCommand({
+      id: 'stop-terminal-server',
+      name: 'Stop terminal server',
+      checkCallback: (checking: boolean) => {
+        if (!this._serverManager?.isServerRunning()) {
+          return false;
+        }
+        if (!checking) {
+          this._terminalService?.destroyAllTerminals(false);
+          void this._serverManager.shutdown(true);
+        }
+        return true;
       },
     });
 
