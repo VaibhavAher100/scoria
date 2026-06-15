@@ -168,6 +168,11 @@ pub struct PtyHandler {
     /// this just stops them piling up). `std::sync::Mutex` because the critical
     /// section is a non-blocking abort + store, never held across an await.
     orphan_timer: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    /// Signalled once when the orphan reaper kills the last session with no
+    /// client attached: the daemon then has nothing left to serve and should
+    /// exit instead of looping `accept` forever (M2 Part B B5 no-zombie
+    /// backstop). The pipe serve loop awaits this alongside the next connection.
+    shutdown: Arc<Notify>,
 }
 
 impl PtyHandler {
@@ -179,7 +184,20 @@ impl PtyHandler {
             attach_epoch: Arc::new(AtomicU64::new(0)),
             orphan_timeout: ORPHAN_TIMEOUT,
             orphan_timer: Arc::new(Mutex::new(None)),
+            shutdown: Arc::new(Notify::new()),
         }
+    }
+
+    /// Number of sessions currently in the registry (alive or, until reaped,
+    /// exited-while-detached corpses).
+    pub async fn session_count(&self) -> usize {
+        self.sessions.lock().await.len()
+    }
+
+    /// A handle to the idle-shutdown signal (see [`Self::shutdown`]). The serve
+    /// loop clones this and exits when it fires.
+    pub fn shutdown_signal(&self) -> Arc<Notify> {
+        Arc::clone(&self.shutdown)
     }
 
     /// Set the message sink. Bumps the attach epoch so any orphan-timeout timer
@@ -219,12 +237,16 @@ impl PtyHandler {
         let sessions = Arc::clone(&self.sessions);
         let attach_epoch = Arc::clone(&self.attach_epoch);
         let timeout = self.orphan_timeout;
+        let shutdown = Arc::clone(&self.shutdown);
         let timer = tokio::spawn(async move {
             time::sleep(timeout).await;
             if attach_epoch.load(Ordering::SeqCst) == epoch {
                 // Still detached on this same epoch: no client came back.
                 log_info!("孤儿会话超时,清理");
                 reap_sessions(&sessions).await;
+                // Nothing left to serve and no client: tell the serve loop to
+                // exit so an abandoned daemon does not linger (B5 no-zombie).
+                shutdown.notify_one();
             }
         });
         // Keep at most one live timer: abort any prior one before storing this.
@@ -1124,5 +1146,35 @@ mod tests {
         );
 
         handler.handle_destroy(&session_id).await.ok();
+    }
+
+    /// B5 deliverable: when the orphan reaper kills the last detached session,
+    /// it fires the shutdown signal (which the serve loop uses to exit) and the
+    /// registry is empty.
+    #[tokio::test]
+    async fn reaping_the_last_session_signals_shutdown() {
+        let mut handler = PtyHandler::new();
+        handler.orphan_timeout = Duration::from_millis(200);
+
+        let sink: Sender = Arc::new(CollectSink::default());
+        handler.set_sender(sink).await;
+        handler
+            .handle_init(Some("cmd".into()), None, None, None, Some(80), Some(24))
+            .await
+            .expect("init session");
+        let signal = handler.shutdown_signal();
+
+        handler.detach().await;
+
+        // The signal must arrive once the reaper runs (well before this bound).
+        tokio::time::timeout(Duration::from_millis(1500), signal.notified())
+            .await
+            .expect("shutdown signal was not fired after the orphan reaper ran");
+
+        assert_eq!(
+            handler.session_count().await,
+            0,
+            "registry should be empty after the reaper drained it"
+        );
     }
 }
