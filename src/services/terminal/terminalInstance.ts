@@ -625,6 +625,34 @@ export class TerminalInstance {
     this.setupPtyClientHandlers();
   }
 
+  /**
+   * Re-attach to the same live session after a transport reconnect.
+   *
+   * Re-binds the session event handlers to the (reconnected) PtyClient and asks
+   * the daemon to replay the output missed while detached. The protocol state
+   * (win32 input mode, Claude Code state) is deliberately NOT reset: it is the
+   * same shell continuing, so any reset would drop state the replay does not
+   * re-emit. Throws on failure so the caller falls back to a fresh session.
+   */
+  private async reattachPtySession(serverManager: ServerManager, sessionId: string): Promise<void> {
+    const ptyClient = serverManager.pty();
+
+    // Re-register handlers on the current client before the replay drains, so
+    // the replayed bytes land in xterm. dispose-then-setup avoids double output
+    // if the same PtyClient instance still held the old handlers.
+    this.disposePtyClientHandlers();
+    this.ptyClient = ptyClient;
+    this.sessionId = sessionId;
+    this.setupPtyClientHandlers();
+
+    await ptyClient.reattach(sessionId);
+    if (this.isDestroyed) return;
+
+    // The shell may have been resized while detached; re-assert current dims.
+    this.sendResize(this.xterm.cols, this.xterm.rows);
+    debugLog('[Terminal] 已重新连接会话:', sessionId);
+  }
+
   private resetSessionProtocolState(): void {
     this.win32InputModeEnabled = false;
     this.claudeCodeSessionState.reset();
@@ -891,20 +919,40 @@ export class TerminalInstance {
     this.xterm.write('\x1b[32m[连接已恢复，正在恢复终端会话...]\x1b[0m\r\n');
 
     try {
-      this.disposePtyClientHandlers();
-      this.sessionId = null;
       this.clearPendingInput();
 
-      const reconnectCwd = this.currentCwd ?? this.options.cwd;
-      try {
-        await this.initializePtySession(serverManager, reconnectCwd);
-      } catch (error) {
-        if (!this.currentCwd || this.currentCwd === this.options.cwd) {
-          throw error;
+      // Prefer re-attaching to the still-live session the daemon kept across the
+      // transport drop: same shell, with the bytes missed while detached replayed
+      // onto the new connection. Only fall back to a fresh shell if the daemon no
+      // longer has it (SESSION_NOT_FOUND - reaped by the orphan timeout, or the
+      // server process actually restarted).
+      const previousSessionId = this.sessionId;
+      let reattached = false;
+      if (previousSessionId) {
+        try {
+          await this.reattachPtySession(serverManager, previousSessionId);
+          reattached = true;
+        } catch (error) {
+          if (this.isDestroyed) return;
+          debugWarn('[Terminal] 重新连接会话失败，回退到新建会话:', error);
         }
+      }
 
-        debugWarn('[Terminal] 使用当前目录恢复会话失败，回退到初始目录:', error);
-        await this.initializePtySession(serverManager, this.options.cwd);
+      if (!reattached) {
+        this.disposePtyClientHandlers();
+        this.sessionId = null;
+
+        const reconnectCwd = this.currentCwd ?? this.options.cwd;
+        try {
+          await this.initializePtySession(serverManager, reconnectCwd);
+        } catch (error) {
+          if (!this.currentCwd || this.currentCwd === this.options.cwd) {
+            throw error;
+          }
+
+          debugWarn('[Terminal] 使用当前目录恢复会话失败，回退到初始目录:', error);
+          await this.initializePtySession(serverManager, this.options.cwd);
+        }
       }
       if (this.isDestroyed) return;
 
