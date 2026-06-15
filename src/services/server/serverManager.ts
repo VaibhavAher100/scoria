@@ -410,7 +410,12 @@ export class ServerManager {
   private async startServer(): Promise<void> {
     try {
       debugLog('[ServerManager] 启动统一服务器...');
-      
+
+      // A prior shutdown (e.g. the "Stop terminal server" command) left
+      // isShuttingDown set; clear it so reconnect + crash recovery work for
+      // this freshly started daemon.
+      this.resetShutdownState();
+
       const binaryPath = this.getBinaryPath();
 
       await this.ensureBinaryReady();
@@ -432,7 +437,14 @@ export class ServerManager {
       // other platform stays on the loopback WebSocket until UDS lands (M3).
       const serverArgs = this.usePipe() ? ['--pipe'] : ['--port', '0'];
       this.process = this.spawn(binaryPath, serverArgs, {
-        stdio: ['pipe', 'pipe', 'pipe'],
+        // stderr is discarded, not piped: the daemon logs to stderr via
+        // `eprintln!`, which PANICS on a broken-pipe write. Because the daemon
+        // now outlives the renderer (reload survival), a piped stderr whose
+        // read-end dies with the renderer would crash the daemon on its next
+        // log line - defeating survival across a full app quit/relaunch.
+        // 'ignore' gives it a stable sink. stdout stays piped only to read the
+        // one startup info line; the daemon never writes stdout again.
+        stdio: ['pipe', 'pipe', 'ignore'],
         env: {
           ...process.env,
           TERM: process.env.TERM || 'xterm-256color',
@@ -689,11 +701,9 @@ export class ServerManager {
       };
 
       this.process.stdout.on('data', onData);
-      
-      // Listen to stderr for debugging
-      this.process.stderr?.on('data', (data: Buffer) => {
-        debugLog('[ServerManager] stderr:', data.toString());
-      });
+
+      // (Daemon stderr is discarded at spawn - see the `stdio` note in
+      // startServer - so there is no stderr stream to listen on here.)
 
       this.process.on('exit', (code) => {
         window.clearTimeout(timeout);
