@@ -33,7 +33,12 @@ import type { BinaryDownloadConfig } from './binaryDownloadUrls';
 import type { Transport, TransportMessage, SocketConnector } from './transport.ts';
 import { WebSocketTransport, PipeTransport } from './transport.ts';
 import type { DaemonRecord } from './daemonRecord.ts';
-import { PIPE_NAME_RE, serializeDaemonRecord } from './daemonRecord.ts';
+import {
+  PIPE_NAME_RE,
+  serializeDaemonRecord,
+  parseDaemonRecord,
+  isVersionCompatible,
+} from './daemonRecord.ts';
 
 type BinaryUpdateResult = 'skipped-offline' | 'already-ready' | 'downloaded' | 'updated';
 const DEV_RELOAD_REQUEST_FILE = '.termy-dev-reload.json';
@@ -107,6 +112,12 @@ export class ServerManager {
 
   /** Server named-pipe path (Windows named-pipe transport) */
   private pipePath: string | null = null;
+
+  /**
+   * PID of a daemon we re-discovered and reused rather than spawned (Part B).
+   * We hold no `ChildProcess` handle for it, so teardown kills it by pid.
+   */
+  private reusedDaemonPid: number | null = null;
   
   /** Whether shutdown is in progress */
   private isShuttingDown = false;
@@ -278,8 +289,13 @@ export class ServerManager {
       } finally {
         this.process = null;
       }
+    } else if (this.reusedDaemonPid !== null) {
+      // A daemon we reused (not spawned) has no ChildProcess handle - kill by pid.
+      // (Part B B3 makes reload keep it alive; an explicit shutdown still stops it.)
+      this.killByPid(this.reusedDaemonPid);
     }
-    
+    this.reusedDaemonPid = null;
+
     // The daemon was killed above, so its sidecar record is now stale - remove
     // it so a reloaded plugin does not probe a dead pipe (Part B keeps the
     // daemon alive on reload; an explicit shutdown still means "gone").
@@ -305,7 +321,8 @@ export class ServerManager {
    * Whether the server is running
    */
   isServerRunning(): boolean {
-    return this.hasEndpoint() && this.process !== null;
+    // Either a daemon we spawned (have a handle for) or one we reused by pid.
+    return this.hasEndpoint() && (this.process !== null || this.reusedDaemonPid !== null);
   }
 
   /**
@@ -382,12 +399,22 @@ export class ServerManager {
       debugLog('[ServerManager] 启动统一服务器...');
       
       const binaryPath = this.getBinaryPath();
-      
+
       await this.ensureBinaryReady();
-      
+
       // Ensure executable permission (Unix)
       await this.ensureExecutable(binaryPath);
-      
+
+      // Part B: before spawning, try to re-discover and reuse a daemon left
+      // running by a prior plugin instance (e.g. across a reload). Only the
+      // pipe transport persists a daemon worth reusing.
+      if (this.usePipe() && await this.tryReuseDaemon()) {
+        this.restartAttempts = 0;
+        this.setupServerExitHandler(); // no-op without a child handle; transport-close drives reconnect
+        this.emit('server-started', 0);
+        return;
+      }
+
       // Start the process. Windows uses the OS-authenticated named pipe; every
       // other platform stays on the loopback WebSocket until UDS lands (M3).
       const serverArgs = this.usePipe() ? ['--pipe'] : ['--port', '0'];
@@ -712,6 +739,78 @@ export class ServerManager {
       } catch {
         /* nothing more to do */
       }
+    }
+  }
+
+  /** Read + validate the daemon record. Returns null if absent or malformed. */
+  private readDaemonRecord(): DaemonRecord | null {
+    try {
+      const recordPath = this.getDaemonRecordPath();
+      if (!this.fs.existsSync(recordPath)) {
+        return null;
+      }
+      return parseDaemonRecord(this.fs.readFileSync(recordPath, 'utf8'));
+    } catch (error) {
+      debugWarn('[ServerManager] 读取守护进程记录失败:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Part B - daemon re-discovery. Look for a sidecar record left by a prior
+   * plugin instance and, if its daemon is still alive and speaks our version,
+   * reuse it instead of spawning a fresh one. Returns true iff a daemon was
+   * reused (transport connected).
+   *
+   * Security: the record is a same-user file but treated as untrusted input.
+   * `parseDaemonRecord` already enforces `PIPE_NAME_RE`, so a doctored record
+   * cannot steer us at an arbitrary pipe name; reaching a *foreign* daemon
+   * squatting a `termy-<uuid>` name is additionally blocked by the pipe's
+   * user-only DACL (set by the daemon that created it). On a version mismatch
+   * the recorded pid IS ours by record, so a best-effort kill is safe; we never
+   * blind-kill a pid we have not tied to our own pipe.
+   */
+  private async tryReuseDaemon(): Promise<boolean> {
+    const record = this.readDaemonRecord();
+    if (!record) {
+      return false;
+    }
+
+    if (!isVersionCompatible(record, this.version)) {
+      debugLog(
+        `[ServerManager] 守护进程记录版本不匹配 (${record.binaryVersion} != ${this.version})，` +
+        `终止并重新启动`
+      );
+      this.killByPid(record.pid);
+      this.clearDaemonRecord();
+      return false;
+    }
+
+    // Probe by attempting to connect to the persisted pipe.
+    this.pipePath = record.pipe;
+    try {
+      await this.connectTransport();
+    } catch (error) {
+      debugWarn('[ServerManager] 探测已有守护进程失败，将重新启动:', error);
+      this.pipePath = null;
+      this.transport = null;
+      this.wsConnectPromise = null;
+      this.clearDaemonRecord();
+      return false;
+    }
+
+    // Connected to a live, version-matched daemon we did not spawn.
+    this.reusedDaemonPid = record.pid;
+    debugLog(`[ServerManager] 已重用现有守护进程 (pid ${record.pid}): ${record.pipe}`);
+    return true;
+  }
+
+  /** Best-effort SIGTERM to a pid. Used only for pids tied to our own record. */
+  private killByPid(pid: number): void {
+    try {
+      process.kill(pid, 'SIGTERM');
+    } catch (error) {
+      debugWarn('[ServerManager] 终止守护进程失败 (pid', pid, '):', error);
     }
   }
 
