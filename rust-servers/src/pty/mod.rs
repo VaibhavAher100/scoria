@@ -14,6 +14,7 @@ use crate::pty::osc_scanner::{OscEvent, OscScanner};
 use crate::pty::replay::ReplayBuffer;
 use crate::transport::{OutMessage, Sender};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::sync::{Mutex as TokioMutex, Notify};
 use tokio::time::{self, Duration, Instant};
@@ -47,6 +48,36 @@ macro_rules! log_debug {
 /// Max bytes of detached output retained per session for replay on reattach.
 /// Past this the oldest bytes are dropped (the buffer flags itself truncated).
 const REPLAY_CAP: usize = 256 * 1024;
+
+/// How long a detached daemon may keep its sessions alive with no client before
+/// they are reaped. A reload reconnects in seconds; this is the cap on a client
+/// that never comes back, so the shells + tasks don't leak forever.
+const ORPHAN_TIMEOUT: Duration = Duration::from_secs(300);
+
+/// Shared session registry. `Arc` so the orphan-timeout task (spawned from
+/// `detach`) can reap it after the timeout without borrowing `self`.
+type Sessions = Arc<TokioMutex<HashMap<String, PtySessionContext>>>;
+
+/// Kill every session's PTY and drain the registry. Shared by `cleanup_all`
+/// (WS disconnect) and the orphan-timeout reaper.
+///
+/// The read task is `abort`ed, not awaited: after `kill` the ConPTY master read
+/// may not return EOF until its handle is dropped (which happens as `context`
+/// drops here), so awaiting the task inline would block this function — and the
+/// `sessions` lock it holds — until then. Aborting releases the lock at once;
+/// the blocked reader thread exits when the dropped master closes its pipe.
+async fn reap_sessions(sessions: &Sessions) {
+    let mut guard = sessions.lock().await;
+    for (session_id, mut context) in guard.drain() {
+        log_info!("清理会话: {}", session_id);
+        if let Ok(mut session) = context.session.try_lock() {
+            let _ = session.kill();
+        }
+        if let Some(task) = context.read_task.take() {
+            task.abort();
+        }
+    }
+}
 
 /// Wrap PTY output bytes in the client's binary frame:
 /// `[session_id_len: u8][session_id: bytes][data: bytes]`. Used for both live
@@ -105,44 +136,75 @@ impl PtySessionContext {
 /// Manages the lifecycle of multiple PTY sessions and handles terminal-related messages
 pub struct PtyHandler {
     /// Session registry: session_id -> PtySessionContext
-    sessions: TokioMutex<HashMap<String, PtySessionContext>>,
+    sessions: Sessions,
     /// Re-bindable message sink slot used to send PTY output to the current
     /// client. `Arc` so the slot itself (not a one-shot snapshot) is shared
     /// into each read task: a reconnect re-points it and output follows the
     /// live connection; while `None` the handler is detached (M2 persistence).
     sender: Arc<TokioMutex<Option<Sender>>>,
+    /// Bumped every time a client attaches (`set_sender`). The orphan-timeout
+    /// task captures the value at `detach` and only reaps if it is unchanged
+    /// when the timer fires — so a reconnect (which bumps it) cancels a pending
+    /// reap, and a stale timer from an earlier detach can't kill a session that
+    /// a newer client has since claimed (attach epochs, M2 S5).
+    attach_epoch: Arc<AtomicU64>,
+    /// How long sessions survive with no client before the orphan reaper kills
+    /// them. Field (not the `ORPHAN_TIMEOUT` const directly) so tests can shrink
+    /// it.
+    orphan_timeout: Duration,
 }
 
 impl PtyHandler {
     /// Create a new PTY handler
     pub fn new() -> Self {
         Self {
-            sessions: TokioMutex::new(HashMap::new()),
+            sessions: Arc::new(TokioMutex::new(HashMap::new())),
             sender: Arc::new(TokioMutex::new(None)),
+            attach_epoch: Arc::new(AtomicU64::new(0)),
+            orphan_timeout: ORPHAN_TIMEOUT,
         }
     }
 
-    /// Set the message sink
+    /// Set the message sink. Bumps the attach epoch so any orphan-timeout timer
+    /// pending from a prior detach sees the change and cancels its reap.
     pub async fn set_sender(&self, sender: Sender) {
         let mut guard = self.sender.lock().await;
         *guard = Some(sender);
+        self.attach_epoch.fetch_add(1, Ordering::SeqCst);
     }
 
     /// Detach the current client without tearing sessions down.
     ///
     /// Called when a connection closes. The sender is cleared so nothing tries
     /// to write to the dead socket, but the PTY processes keep running so a
-    /// reconnect can re-attach (M2 persistence). Unclaimed sessions are reaped
-    /// by the orphan timeout (M2 S5), not here. This is the replacement for
+    /// reconnect can re-attach (M2 persistence). This is the replacement for
     /// [`Self::cleanup_all`] on the daemon-owned transports.
     ///
-    /// Until S5 lands this is UNBOUNDED: each detached session keeps a live
-    /// shell, an async read task, and a blocked `spawn_blocking` thread. Repeated
-    /// connect/init/disconnect (same user) grows that without a cap. S5's orphan
-    /// timeout closes the gap.
+    /// A detached session is bounded by the orphan timeout: this spawns a timer
+    /// that reaps all sessions after `orphan_timeout` UNLESS a client attaches
+    /// in the meantime (which bumps `attach_epoch`, so the timer sees the change
+    /// and cancels). That epoch check is also what stops a stale timer from an
+    /// earlier detach from killing a session a newer client has reclaimed.
     pub async fn detach(&self) {
-        let mut guard = self.sender.lock().await;
-        *guard = None;
+        {
+            let mut guard = self.sender.lock().await;
+            *guard = None;
+        }
+
+        // Capture the epoch as of this detach. If anything attaches before the
+        // timer fires, the epoch advances and the reap is skipped.
+        let epoch = self.attach_epoch.load(Ordering::SeqCst);
+        let sessions = Arc::clone(&self.sessions);
+        let attach_epoch = Arc::clone(&self.attach_epoch);
+        let timeout = self.orphan_timeout;
+        tokio::spawn(async move {
+            time::sleep(timeout).await;
+            if attach_epoch.load(Ordering::SeqCst) == epoch {
+                // Still detached on this same epoch: no client came back.
+                log_info!("孤儿会话超时,清理");
+                reap_sessions(&sessions).await;
+            }
+        });
     }
 
     /// Snapshot of a session's replay buffer (retained detached output). Test
@@ -586,25 +648,10 @@ impl PtyHandler {
         }
     }
     
-    /// Clean up all sessions (called when the connection closes)
+    /// Clean up all sessions (called when the WS connection closes)
     pub async fn cleanup_all(&self) {
         log_info!("清理所有 PTY 会话");
-        
-        let mut sessions = self.sessions.lock().await;
-        for (session_id, mut context) in sessions.drain() {
-            log_info!("清理会话: {}", session_id);
-            
-            // Terminate the PTY process
-            if let Ok(mut session) = context.session.try_lock() {
-                let _ = session.kill();
-            }
-            
-            // Wait for the reader task to finish
-            if let Some(task) = context.read_task.take() {
-                let _ = task.await;
-            }
-        }
-        
+        reap_sessions(&self.sessions).await;
         log_info!("所有 PTY 会话已清理");
     }
     
@@ -914,6 +961,68 @@ mod tests {
             !contains(&after, b"REPLAY_MARK"),
             "replay buffer was not drained: {:?}",
             String::from_utf8_lossy(&after)
+        );
+
+        handler.handle_destroy(&session_id).await.ok();
+    }
+
+    async fn has_session(handler: &PtyHandler, session_id: &str) -> bool {
+        handler.sessions.lock().await.contains_key(session_id)
+    }
+
+    /// S5 deliverable: a session left detached past the orphan timeout, with no
+    /// client coming back, is killed and removed (no leaked shell/task).
+    #[tokio::test]
+    async fn detached_session_is_reaped_after_orphan_timeout() {
+        let mut handler = PtyHandler::new();
+        handler.orphan_timeout = Duration::from_millis(200);
+
+        let sink: Sender = Arc::new(CollectSink::default());
+        handler.set_sender(sink).await;
+        handler
+            .handle_init(Some("cmd".into()), None, None, None, Some(80), Some(24))
+            .await
+            .expect("init session");
+        let session_id = only_session_id(&handler).await;
+        assert!(has_session(&handler, &session_id).await);
+
+        // No client comes back: the orphan reaper must fire.
+        handler.detach().await;
+        sleep(Duration::from_millis(700)).await;
+
+        assert!(
+            !has_session(&handler, &session_id).await,
+            "orphaned session was not reaped after the timeout"
+        );
+    }
+
+    /// S5 attach-epoch guard: a client that reconnects before the timeout keeps
+    /// the session alive — the stale orphan timer from the earlier detach must
+    /// see the bumped epoch and cancel its reap.
+    #[tokio::test]
+    async fn reconnect_before_timeout_keeps_session_alive() {
+        let mut handler = PtyHandler::new();
+        handler.orphan_timeout = Duration::from_millis(300);
+
+        let sink1: Sender = Arc::new(CollectSink::default());
+        handler.set_sender(sink1).await;
+        handler
+            .handle_init(Some("cmd".into()), None, None, None, Some(80), Some(24))
+            .await
+            .expect("init session");
+        let session_id = only_session_id(&handler).await;
+
+        // Detach, then reconnect within the window (bumps the attach epoch).
+        handler.detach().await;
+        sleep(Duration::from_millis(50)).await;
+        let sink2: Sender = Arc::new(CollectSink::default());
+        handler.set_sender(sink2).await;
+
+        // Wait past the original timer's deadline: it must have cancelled.
+        sleep(Duration::from_millis(600)).await;
+        assert!(
+            has_session(&handler, &session_id).await,
+            "session was wrongly reaped despite a reconnect before the timeout"
         );
 
         handler.handle_destroy(&session_id).await.ok();
