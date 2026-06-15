@@ -187,6 +187,12 @@ impl MessageRouter {
     pub async fn set_sender(&self, sender: Sender) {
         self.pty_handler.set_sender(sender).await;
     }
+
+    /// Detach the current client (clear the sender) while keeping sessions
+    /// alive for a reconnect. See [`crate::pty::PtyHandler::detach`].
+    pub async fn detach(&self) {
+        self.pty_handler.detach().await;
+    }
     
     /// Get a reference to the PTY handler (used to write data)
     pub fn pty_handler(&self) -> &crate::pty::PtyHandler {

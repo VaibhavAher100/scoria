@@ -107,3 +107,39 @@ test('keeps a trailing partial frame buffered without erroring', () => {
   assert.notEqual(decoder.next(), null);
   assert.equal(decoder.next(), null);
 });
+
+test('reassembles a large frame fed across many small chunks', () => {
+  // Exercises the amortized-linear reassembly path: a payload far larger than
+  // any single feed, delivered in many fixed-size reads (mirrors a big PTY
+  // burst over a pipe). Verifies byte-exact reconstruction.
+  const size = 1024 * 1024; // 1 MiB
+  const payload = new Uint8Array(size);
+  for (let i = 0; i < size; i++) {
+    payload[i] = i & 0xff;
+  }
+  const wire = encodeFrame(FrameType.Binary, payload);
+
+  const decoder = new FrameDecoder();
+  const chunk = 4096;
+  for (let off = 0; off < wire.length; off += chunk) {
+    decoder.feed(wire.subarray(off, Math.min(off + chunk, wire.length)));
+  }
+  const frames = drain(decoder);
+  assert.equal(frames.length, 1);
+  assert.deepEqual(frames[0].payload, payload);
+});
+
+test('reuses capacity across many sequential frames', () => {
+  // After a full drain the read cursor resets, so feeding then draining many
+  // small frames must keep decoding correctly (regression guard on the cursor
+  // reset that lets capacity be reused from the front instead of growing).
+  const decoder = new FrameDecoder();
+  for (let i = 0; i < 10_000; i++) {
+    const byte = i & 0xff;
+    decoder.feed(encodeFrame(FrameType.Binary, new Uint8Array([byte])));
+    const frame = decoder.next();
+    assert.notEqual(frame, null);
+    assert.deepEqual(frame!.payload, new Uint8Array([byte]));
+    assert.equal(decoder.next(), null);
+  }
+});

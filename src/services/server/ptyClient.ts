@@ -28,9 +28,21 @@ export class PtyClient extends ModuleClient {
   
   /** Promise resolvers waiting for init_complete responses */
   private initResolvers: Map<string, { resolve: (sessionId: string) => void; reject: (error: Error) => void }> = new Map();
-  
+
   /** Temporarily stores the init request ID for response correlation */
   private pendingInitId: string | null = null;
+
+  /** Promise resolvers waiting for reattach_complete responses, keyed by session_id */
+  private reattachResolvers: Map<string, { resolve: () => void; reject: (error: Error) => void }> = new Map();
+
+  /**
+   * session_id of the in-flight reattach. A reattach failure comes back as a
+   * generic `error` with no session_id (see router create_error_response), so
+   * it is correlated through this slot the same way init uses pendingInitId.
+   * Recovery is driven sequentially (TerminalService awaits one terminal at a
+   * time), so a single slot is sufficient.
+   */
+  private pendingReattachId: string | null = null;
 
   constructor() {
     super('pty');
@@ -91,8 +103,54 @@ export class PtyClient extends ModuleClient {
   }
 
   /**
+   * Re-attach to an existing PTY session after a transport reconnect.
+   *
+   * Unlike init(), this does NOT spawn a new shell: the daemon kept the session
+   * alive while detached and replays the bytes missed during the gap on the
+   * normal output path (so the existing onSessionOutput handler receives them).
+   * Resolves on reattach_complete, rejects on error (e.g. SESSION_NOT_FOUND when
+   * the session was reaped by the orphan timeout) so the caller can fall back to
+   * a fresh init.
+   *
+   * @param sessionId Session ID to re-attach to
+   */
+  async reattach(sessionId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const timeout = window.setTimeout(() => {
+        this.reattachResolvers.delete(sessionId);
+        if (this.pendingReattachId === sessionId) {
+          this.pendingReattachId = null;
+        }
+        reject(new Error('PTY reattach timeout'));
+      }, 30000);
+
+      const cleanup = () => {
+        window.clearTimeout(timeout);
+        this.reattachResolvers.delete(sessionId);
+        if (this.pendingReattachId === sessionId) {
+          this.pendingReattachId = null;
+        }
+      };
+
+      this.reattachResolvers.set(sessionId, {
+        resolve: () => {
+          cleanup();
+          resolve();
+        },
+        reject: (error: Error) => {
+          cleanup();
+          reject(error);
+        },
+      });
+      this.pendingReattachId = sessionId;
+
+      this.send('reattach', { session_id: sessionId });
+    });
+  }
+
+  /**
    * Resize the terminal
-   * 
+   *
    * @param sessionId Session ID
    * @param cols Number of columns
    * @param rows Number of rows
@@ -319,7 +377,15 @@ export class PtyClient extends ModuleClient {
           }
         }
         break;
-        
+
+      case 'reattach_complete':
+        // Re-attach succeeded; the replay bytes arrive separately on the output
+        // path. resolve() lets the terminal resume on the same live session.
+        if (sessionId) {
+          this.reattachResolvers.get(sessionId)?.resolve();
+        }
+        break;
+
       case 'output':
         // Output data (JSON-formatted output; binary data is handled in handleBinaryMessage)
         if (sessionId && msg.data) {
@@ -349,6 +415,11 @@ export class PtyClient extends ModuleClient {
           if (resolver) {
             resolver.reject(new Error(msg.message as string || 'PTY error'));
           }
+        } else if (this.pendingReattachId) {
+          // reattach error (no session_id on the wire) - e.g. SESSION_NOT_FOUND
+          this.reattachResolvers
+            .get(this.pendingReattachId)
+            ?.reject(new Error(msg.message as string || 'PTY reattach failed'));
         }
         break;
 
@@ -403,6 +474,8 @@ export class PtyClient extends ModuleClient {
     this.sessionListeners.clear();
     this.initResolvers.clear();
     this.pendingInitId = null;
+    this.reattachResolvers.clear();
+    this.pendingReattachId = null;
     super.destroy();
   }
 }
