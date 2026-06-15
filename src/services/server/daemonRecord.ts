@@ -14,7 +14,10 @@
  * Shape the persisted (and announced) pipe path must match: `\\.\pipe\termy-<uuid>`.
  * Single source of truth - ServerManager imports this rather than redeclaring it,
  * so the sidecar and the live stdout path are validated by the exact same rule.
- * A tampered sidecar therefore cannot steer the client at a foreign pipe.
+ * A tampered sidecar therefore cannot steer the client at a foreign-*named*
+ * pipe; reaching a pipe owned by a *different user* is separately blocked by the
+ * pipe's user-only DACL. (A same-user process squatting a `termy-<uuid>` name is
+ * inside the trusted same-user threat model.)
  */
 export const PIPE_NAME_RE = /^\\\\\.\\pipe\\termy-[0-9a-f-]{36}$/i;
 

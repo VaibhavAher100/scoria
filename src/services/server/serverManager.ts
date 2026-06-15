@@ -762,27 +762,23 @@ export class ServerManager {
    * reuse it instead of spawning a fresh one. Returns true iff a daemon was
    * reused (transport connected).
    *
-   * Security: the record is a same-user file but treated as untrusted input.
-   * `parseDaemonRecord` already enforces `PIPE_NAME_RE`, so a doctored record
-   * cannot steer us at an arbitrary pipe name; reaching a *foreign* daemon
-   * squatting a `termy-<uuid>` name is additionally blocked by the pipe's
-   * user-only DACL (set by the daemon that created it). On a version mismatch
-   * the recorded pid IS ours by record, so a best-effort kill is safe; we never
-   * blind-kill a pid we have not tied to our own pipe.
+   * Probe-before-kill: we connect to the persisted pipe FIRST. A failed probe
+   * means the daemon is already gone, so we clear the record and spawn fresh
+   * without signalling anything (this avoids SIGTERM-ing a pid the OS may have
+   * recycled onto an unrelated process after our daemon died). Only once the
+   * pipe is confirmed live do we either reuse it (version match) or kill it
+   * (version skew) - at that point the recorded pid owns a pipe that, by its
+   * user-only DACL, only our own account could have created.
+   *
+   * Security: the record is a same-user file treated as untrusted input.
+   * `parseDaemonRecord` enforces `PIPE_NAME_RE`, so a doctored record cannot
+   * steer us at a foreign-*named* pipe; reaching a pipe owned by a *different
+   * user* is blocked by the DACL. A same-user process squatting a `termy-<uuid>`
+   * name is inside the trusted (same-user) threat model.
    */
   private async tryReuseDaemon(): Promise<boolean> {
     const record = this.readDaemonRecord();
     if (!record) {
-      return false;
-    }
-
-    if (!isVersionCompatible(record, this.version)) {
-      debugLog(
-        `[ServerManager] 守护进程记录版本不匹配 (${record.binaryVersion} != ${this.version})，` +
-        `终止并重新启动`
-      );
-      this.killByPid(record.pid);
-      this.clearDaemonRecord();
       return false;
     }
 
@@ -791,10 +787,33 @@ export class ServerManager {
     try {
       await this.connectTransport();
     } catch (error) {
+      // Dead/stale pipe: the daemon is gone. Spawn fresh; do NOT kill the pid
+      // (it may have been recycled onto an unrelated process).
       debugWarn('[ServerManager] 探测已有守护进程失败，将重新启动:', error);
       this.pipePath = null;
       this.transport = null;
       this.wsConnectPromise = null;
+      this.clearDaemonRecord();
+      return false;
+    }
+
+    // The pipe is live. If the daemon speaks an older protocol, replace it:
+    // tear down the probe connection, kill the (now confirmed-live, ours-by-DACL)
+    // daemon, and fall through to a fresh spawn. Never reattach across versions.
+    if (!isVersionCompatible(record, this.version)) {
+      debugLog(
+        `[ServerManager] 守护进程记录版本不匹配 (${record.binaryVersion} != ${this.version})，` +
+        `终止并重新启动`
+      );
+      try {
+        this.transport?.close();
+      } catch {
+        /* best-effort teardown */
+      }
+      this.transport = null;
+      this.wsConnectPromise = null;
+      this.pipePath = null;
+      this.killByPid(record.pid);
       this.clearDaemonRecord();
       return false;
     }
