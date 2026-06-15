@@ -14,7 +14,7 @@ use crate::pty::osc_scanner::{OscEvent, OscScanner};
 use crate::pty::replay::ReplayBuffer;
 use crate::transport::{OutMessage, Sender};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::sync::{Mutex as TokioMutex, Notify};
 use tokio::time::{self, Duration, Instant};
@@ -109,6 +109,13 @@ struct PtySessionContext {
     /// new client even when the shell is idle (no PTY output to wake it). Shared
     /// with the read task.
     reattach: Arc<Notify>,
+    /// Set by the read task when it terminates (shell EOF/exit/read error). A
+    /// session whose shell exited while detached lingers in the registry until
+    /// the orphan reaper runs; `reattach` checks this so it reports the dead
+    /// shell as gone (SESSION_NOT_FOUND → client respawns) instead of adopting a
+    /// corpse that will never deliver output or an exit event. Shared with the
+    /// read task.
+    exited: Arc<AtomicBool>,
 }
 
 impl PtySessionContext {
@@ -123,6 +130,7 @@ impl PtySessionContext {
             read_task: None,
             replay: Arc::new(TokioMutex::new(ReplayBuffer::new(REPLAY_CAP))),
             reattach: Arc::new(Notify::new()),
+            exited: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -152,6 +160,14 @@ pub struct PtyHandler {
     /// them. Field (not the `ORPHAN_TIMEOUT` const directly) so tests can shrink
     /// it.
     orphan_timeout: Duration,
+    /// The one in-flight orphan-timeout timer, if any. `detach` aborts the prior
+    /// timer before arming a new one and `set_sender` aborts it on attach, so at
+    /// most one reaper task is ever live — without this a flaky transport that
+    /// detaches repeatedly would accumulate one sleeping task per disconnect for
+    /// the full timeout window (the epoch check already makes the extras no-ops,
+    /// this just stops them piling up). `std::sync::Mutex` because the critical
+    /// section is a non-blocking abort + store, never held across an await.
+    orphan_timer: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
 }
 
 impl PtyHandler {
@@ -162,6 +178,7 @@ impl PtyHandler {
             sender: Arc::new(TokioMutex::new(None)),
             attach_epoch: Arc::new(AtomicU64::new(0)),
             orphan_timeout: ORPHAN_TIMEOUT,
+            orphan_timer: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -171,6 +188,11 @@ impl PtyHandler {
         let mut guard = self.sender.lock().await;
         *guard = Some(sender);
         self.attach_epoch.fetch_add(1, Ordering::SeqCst);
+        // A client is back: cancel the pending reap (the epoch bump already
+        // neutralizes it; this frees the sleeping task immediately).
+        if let Some(timer) = self.orphan_timer.lock().unwrap().take() {
+            timer.abort();
+        }
     }
 
     /// Detach the current client without tearing sessions down.
@@ -197,7 +219,7 @@ impl PtyHandler {
         let sessions = Arc::clone(&self.sessions);
         let attach_epoch = Arc::clone(&self.attach_epoch);
         let timeout = self.orphan_timeout;
-        tokio::spawn(async move {
+        let timer = tokio::spawn(async move {
             time::sleep(timeout).await;
             if attach_epoch.load(Ordering::SeqCst) == epoch {
                 // Still detached on this same epoch: no client came back.
@@ -205,6 +227,10 @@ impl PtyHandler {
                 reap_sessions(&sessions).await;
             }
         });
+        // Keep at most one live timer: abort any prior one before storing this.
+        if let Some(prev) = self.orphan_timer.lock().unwrap().replace(timer) {
+            prev.abort();
+        }
     }
 
     /// Snapshot of a session's replay buffer (retained detached output). Test
@@ -268,8 +294,9 @@ impl PtyHandler {
         // to flush that buffer to a reconnecting client).
         let replay = Arc::clone(&context.replay);
         let reattach = Arc::clone(&context.reattach);
+        let exited = Arc::clone(&context.exited);
         let read_task = self
-            .start_read_task(session_id.clone(), pty_reader, pty_writer, shell_type, replay, reattach)
+            .start_read_task(session_id.clone(), pty_reader, pty_writer, shell_type, replay, reattach, exited)
             .await?;
         context.read_task = Some(read_task);
         
@@ -295,6 +322,9 @@ impl PtyHandler {
     /// Start the PTY output reader task
     ///
     /// Returns the task handle, which the caller stores
+    // Setup-style task spawner: the args are independent per-session handles, not
+    // worth bundling into a struct for one call site.
+    #[allow(clippy::too_many_arguments)]
     async fn start_read_task(
         &self,
         session_id: String,
@@ -303,6 +333,7 @@ impl PtyHandler {
         _shell_type: Option<String>,
         replay: Arc<TokioMutex<ReplayBuffer>>,
         reattach: Arc<Notify>,
+        exited: Arc<AtomicBool>,
     ) -> Result<tokio::task::JoinHandle<()>, RouterError> {
         const OUTPUT_BATCH_INTERVAL_MS: u64 = 4;
         const READ_BUFFER_SIZE: usize = 8192;
@@ -516,8 +547,9 @@ impl PtyHandler {
                     log_info!("PTY 输出结束: session_id={}", session_id);
 
                     // Send the exit event if a client is attached. If detached,
-                    // the dead session is surfaced on reattach (S4) or reaped by
-                    // the orphan timeout (S5).
+                    // the `exited` flag (set below) makes a later reattach report
+                    // SESSION_NOT_FOUND so the client respawns instead of adopting
+                    // a dead shell; the context is reaped by the orphan timeout.
                     if let Some(sender) = &current_sender {
                         let exit_response = ServerResponse::new(
                             ModuleType::Pty,
@@ -534,8 +566,13 @@ impl PtyHandler {
                     break;
                 }
             }
+
+            // The read loop ended (EOF / exit / read error): the shell is gone.
+            // Mark the session so a reattach in the window before the orphan
+            // reaper removes the context does not adopt a dead shell.
+            exited.store(true, Ordering::SeqCst);
         });
-        
+
         Ok(task)
     }
     
@@ -569,10 +606,21 @@ impl PtyHandler {
         // Clone the per-session handles out before touching the buffer, so we
         // never hold the sessions lock while locking replay (lock-order safety).
         let (notify, replay) = {
-            let sessions = self.sessions.lock().await;
+            let mut sessions = self.sessions.lock().await;
             let context = sessions
                 .get(session_id)
                 .ok_or_else(|| RouterError::ModuleError(format!("SESSION_NOT_FOUND: {}", session_id)))?;
+            // The shell exited while detached: the read task is gone, so notifying
+            // it would do nothing and no exit event will ever arrive. Drop the
+            // corpse and report it gone so the client respawns (its read task
+            // already set `exited`, so no kill/abort is needed here).
+            if context.exited.load(Ordering::SeqCst) {
+                sessions.remove(session_id);
+                return Err(RouterError::ModuleError(format!(
+                    "SESSION_NOT_FOUND: {}",
+                    session_id
+                )));
+            }
             (Arc::clone(&context.reattach), Arc::clone(&context.replay))
         };
 
@@ -964,6 +1012,56 @@ mod tests {
         );
 
         handler.handle_destroy(&session_id).await.ok();
+    }
+
+    /// A session whose shell exits while detached must not be adopted by a later
+    /// reattach: the read task is gone, so `reattach` reports SESSION_NOT_FOUND
+    /// and drops the dead context (the client then respawns a fresh shell)
+    /// instead of believing it holds a live shell that never emits again.
+    #[tokio::test]
+    async fn reattach_to_an_exited_session_is_rejected() {
+        let handler = PtyHandler::new();
+
+        let sink: Sender = Arc::new(CollectSink::default());
+        handler.set_sender(sink).await;
+        handler
+            .handle_init(Some("cmd".into()), None, None, None, Some(80), Some(24))
+            .await
+            .expect("init session");
+        let session_id = only_session_id(&handler).await;
+
+        // Detach, then simulate the read task having ended because the shell
+        // exited while no client was attached. On Windows the ConPTY master does
+        // not return EOF on a clean child exit (the same reason the reaper aborts
+        // rather than awaits the read task), so we set the flag directly: the
+        // behavior under test is that reattach rejects an exited session, not the
+        // timing of how EOF eventually arrives. Keep the PTY handle to clean up.
+        handler.detach().await;
+        let session_arc = {
+            let sessions = handler.sessions.lock().await;
+            let ctx = sessions.get(&session_id).expect("session present");
+            ctx.exited.store(true, Ordering::SeqCst);
+            Arc::clone(&ctx.session)
+        };
+
+        // Reattach must reject the dead shell and drop the corpse.
+        let err = handler
+            .handle_reattach(&session_id)
+            .await
+            .expect_err("reattach to an exited session must error");
+        assert!(
+            err.to_string().contains("SESSION_NOT_FOUND"),
+            "expected SESSION_NOT_FOUND, got: {}",
+            err
+        );
+        assert!(
+            !has_session(&handler, &session_id).await,
+            "exited session was not removed on reattach"
+        );
+
+        // The reattach removed the context from the registry; kill the shell we
+        // spawned via the handle we kept so the test leaves no live process.
+        let _ = session_arc.lock().await.kill();
     }
 
     async fn has_session(handler: &PtyHandler, session_id: &str) -> bool {
