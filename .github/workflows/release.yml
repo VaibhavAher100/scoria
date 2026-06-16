@@ -138,6 +138,7 @@ jobs:
           subject-path: |
             main.js
             styles.css
+            binaries/termy-server-*
 
       - name: Prepare release assets
         run: |
@@ -155,16 +156,6 @@ jobs:
           chmod +x termy/binaries/termy-server-darwin-* || true
           chmod +x termy/binaries/termy-server-linux-* || true
           zip -r "termy-${{ github.ref_name }}.zip" termy
-
-      - name: Upload binaries to R2
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          node scripts/upload-r2-assets.js \
-            --bucket termy-binaries-apac \
-            --version "${{ github.ref_name }}" \
-            --config wrangler.jsonc
 
       - name: Release
         uses: softprops/action-gh-release@v3
