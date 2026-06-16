@@ -145,7 +145,7 @@ export default class TerminalPlugin extends Plugin {
       const pluginDir = this.getPluginDir();
       const version = this.manifest.version;
       const binaryDownloadConfig = {
-        source: this.settings.serverConnection?.binaryDownloadSource ?? 'cloudflare-r2',
+        source: this.settings.serverConnection?.binaryDownloadSource ?? 'github-release',
       };
       const offlineMode = this.settings.serverConnection?.offlineMode ?? false;
       
@@ -495,9 +495,9 @@ export default class TerminalPlugin extends Plugin {
     return {
       ...DEFAULT_TERMINAL_SETTINGS.serverConnection,
       ...serverConnection,
-      binaryDownloadSource: serverConnection?.binaryDownloadSource === 'github-release'
-        ? 'github-release'
-        : 'cloudflare-r2',
+      // Always our GitHub release host; migrates any pre-removal 'cloudflare-r2'
+      // value persisted in old settings to the only remaining source.
+      binaryDownloadSource: 'github-release',
       offlineMode: Boolean(serverConnection?.offlineMode),
     };
   }

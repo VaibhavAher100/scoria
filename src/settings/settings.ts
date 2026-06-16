@@ -128,7 +128,10 @@ export interface TerminalSettings {
  */
 export type PresetWorkflowActionType = 'terminal-command' | 'obsidian-command' | 'open-external';
 
-export type BinaryDownloadSource = 'github-release' | 'cloudflare-r2';
+// The native binary is only ever downloaded from our own GitHub release host.
+// The former 'cloudflare-r2' source pointed at a third-party host we do not
+// control and has been removed; any persisted value is coerced on load.
+export type BinaryDownloadSource = 'github-release';
 
 /**
  * Workflow action definition
@@ -177,7 +180,7 @@ export interface ServerConnectionSettings {
  * Default server connection settings
  */
 export const DEFAULT_SERVER_CONNECTION_SETTINGS: ServerConnectionSettings = {
-  binaryDownloadSource: 'cloudflare-r2',
+  binaryDownloadSource: 'github-release',
   offlineMode: false,
   keepServerAliveOnUnload: true,
 };

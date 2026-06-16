@@ -1920,10 +1920,11 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           'github-release',
           t('settingsDetails.advanced.binaryDownloadSourceGithubRelease')
         );
-        dropdown.addOption(
-          'cloudflare-r2',
-          t('settingsDetails.advanced.binaryDownloadSourceCloudflareR2')
-        );
+        // Coerce any value persisted before the third-party host was removed.
+        if (settings.serverConnection.binaryDownloadSource !== 'github-release') {
+          settings.serverConnection.binaryDownloadSource = 'github-release';
+          void this.saveSettings();
+        }
         dropdown
           .setValue(settings.serverConnection.binaryDownloadSource)
           .onChange((value) => {
