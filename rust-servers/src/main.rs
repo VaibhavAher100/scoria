@@ -1,12 +1,15 @@
 // Terminal Server Main Program
 // Standalone terminal server that provides PTY functionality
 
+mod auth;
 mod framing;
 #[cfg(windows)]
 mod pipe;
 mod router;
 mod server;
 mod transport;
+#[cfg(unix)]
+mod unix;
 
 // Feature modules
 pub mod pty;
@@ -88,6 +91,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             log_info!("named-pipe transport selected");
             if let Err(e) = pipe::serve(&name).await {
                 eprintln!("[ERROR] pipe server error: {}", e);
+                std::process::exit(1);
+            }
+            return Ok(());
+        }
+    }
+
+    // Unix domain socket transport (macOS / Linux, opt-in via --socket). Like
+    // the pipe, auth is OS-enforced (socket file 0600 inside a 0700 dir).
+    #[cfg(unix)]
+    {
+        if env::args().any(|arg| arg == "--socket") {
+            let path = unix::new_socket_path()?;
+            // The TypeScript side reads this line to learn the socket path.
+            println!(
+                r#"{{"socket": {}, "pid": {}}}"#,
+                serde_json::to_string(&path.to_string_lossy())?,
+                std::process::id()
+            );
+            log_info!("unix-socket transport selected");
+            if let Err(e) = unix::serve(&path).await {
+                eprintln!("[ERROR] socket server error: {}", e);
                 std::process::exit(1);
             }
             return Ok(());

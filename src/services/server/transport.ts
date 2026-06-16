@@ -56,14 +56,26 @@ function toUint8Array(data: Uint8Array | ArrayBuffer): Uint8Array {
   return data instanceof ArrayBuffer ? new Uint8Array(data) : data;
 }
 
-/** WebSocket transport: a thin adapter over the existing `ws://` connection. */
+/** WebSocket transport: a thin adapter over the existing `ws://` connection.
+ *
+ * Unlike the pipe/UDS transports (OS-authenticated), the loopback WebSocket has
+ * no OS trust boundary, so it carries a per-daemon capability token. When a
+ * token is set it is sent as the FIRST frame on open - before any PTY command -
+ * matching the server's pre-routing auth gate. The token rides in the message
+ * body, never the URL (avoids log leakage). */
 export class WebSocketTransport implements Transport {
   private ws: WebSocket | null = null;
   private readonly url: string;
+  private readonly authToken: string | undefined;
   private readonly connectTimeoutMs: number;
 
-  constructor(url: string, connectTimeoutMs: number = DEFAULT_CONNECT_TIMEOUT_MS) {
+  constructor(
+    url: string,
+    authToken?: string,
+    connectTimeoutMs: number = DEFAULT_CONNECT_TIMEOUT_MS
+  ) {
     this.url = url;
+    this.authToken = authToken;
     this.connectTimeoutMs = connectTimeoutMs;
   }
 
@@ -86,6 +98,11 @@ export class WebSocketTransport implements Transport {
       }, this.connectTimeoutMs);
 
       ws.onopen = () => {
+        // Authenticate first: this frame must precede any app message so the
+        // server admits the connection before commands are routed.
+        if (this.authToken !== undefined) {
+          ws.send(JSON.stringify({ type: 'auth', token: this.authToken }));
+        }
         if (!settled) {
           settled = true;
           clearTimeout(timeout);

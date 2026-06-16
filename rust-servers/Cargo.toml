@@ -34,6 +34,13 @@ async-trait = "0.1"
 # UUID generation
 uuid = { version = "1.0", features = ["v4"] }
 
+# CSPRNG for the WebSocket capability token
+getrandom = "0.3"
+
+# Unix: geteuid() to validate the socket base directory's ownership
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 # Windows named-pipe DACL (current-user-only access control)
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [

@@ -26,8 +26,12 @@ export interface ServerInfo {
   port?: number;
   /** Named-pipe path (Windows named-pipe transport) */
   pipe?: string;
+  /** Unix domain socket path (macOS/Linux transport) */
+  socket?: string;
   /** Process PID */
   pid?: number;
+  /** Capability token the client must present (WebSocket transport only) */
+  token?: string;
 }
 
 // ============================================================================
