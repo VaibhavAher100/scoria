@@ -84,6 +84,21 @@ class Client {
     });
   }
 
+  // Poll the accumulated PTY text until it matches, or reject on timeout. Avoids
+  // fixed sleeps so a loaded box slows the test down rather than failing it.
+  matchText(re: RegExp, ms = 6000): Promise<RegExpMatchArray> {
+    const start = Date.now();
+    return new Promise((resolve, reject) => {
+      const tick = (): void => {
+        const m = this.text.match(re);
+        if (m) return resolve(m);
+        if (Date.now() - start > ms) return reject(new Error(`timeout waiting for ${re} in:\n${this.text}`));
+        setTimeout(tick, 50);
+      };
+      tick();
+    });
+  }
+
   close(): void {
     this.sock.destroy();
   }
@@ -126,10 +141,7 @@ async function main(): Promise<void> {
     // shell would have neither.
     a.send(ptyInput(sessionId, "MARKER=survivor_$$\n"));
     a.send(ptyInput(sessionId, "echo PIDLINE=$$\n"));
-    await sleep(800);
-    const pidMatch = a.text.match(/PIDLINE=(\d+)/);
-    if (!pidMatch) fail(`never saw the live shell PID; got:\n${a.text}`);
-    const originalPid = pidMatch[1];
+    const originalPid = (await a.matchText(/PIDLINE=(\d+)/))[1];
     console.log("original shell pid:", originalPid);
 
     // 3. Queue output that lands AFTER A disconnects, then simulate the reload by
@@ -139,8 +151,8 @@ async function main(): Promise<void> {
     a.close();
     console.log("client A dropped (reload simulated)");
 
-    // 4. Output is produced while detached -> retained in the replay buffer.
-    await sleep(2500);
+    // 4. The shell keeps running detached; its output (after the in-shell sleep)
+    //    is retained in the replay buffer until a client reattaches.
 
     // 5. Client B reconnects and reattaches by session_id (no new init = no respawn).
     const b = new Client(socketPath);
@@ -149,19 +161,13 @@ async function main(): Promise<void> {
     await b.await("reattach_complete");
     console.log("reattached");
 
-    // Replay must deliver the output produced while detached.
-    await sleep(500);
-    if (!/DETACHED=survivor_\d+ FROM=\d+/.test(b.text)) {
-      fail(`replay missing detached output; got:\n${b.text}`);
-    }
-    const detachedPid = b.text.match(/FROM=(\d+)/)![1];
+    // Replay must deliver the output produced while detached (poll past the sleep 2).
+    const detachedPid = (await b.matchText(/DETACHED=survivor_\d+ FROM=(\d+)/))[1];
 
     // 6. Prove SAME shell (no duplicate): the marker variable still resolves on the
     //    reattached session, and the PID never changed across the reload.
     b.send(ptyInput(sessionId, "echo AFTER=$MARKER PID=$$\n"));
-    await sleep(800);
-    const afterMatch = b.text.match(/AFTER=(survivor_\d+) PID=(\d+)/);
-    if (!afterMatch) fail(`marker variable lost after reattach (duplicate shell?); got:\n${b.text}`);
+    const afterMatch = await b.matchText(/AFTER=(survivor_\d+) PID=(\d+)/);
     if (afterMatch[2] !== originalPid || detachedPid !== originalPid) {
       fail(`pid changed across reload: orig=${originalPid} detached=${detachedPid} after=${afterMatch[2]}`);
     }
