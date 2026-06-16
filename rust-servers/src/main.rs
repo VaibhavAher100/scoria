@@ -1,6 +1,7 @@
 // Terminal Server Main Program
 // Standalone terminal server that provides PTY functionality
 
+mod auth;
 mod framing;
 #[cfg(windows)]
 mod pipe;

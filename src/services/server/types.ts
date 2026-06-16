@@ -28,6 +28,8 @@ export interface ServerInfo {
   pipe?: string;
   /** Process PID */
   pid?: number;
+  /** Capability token the client must present (WebSocket transport only) */
+  token?: string;
 }
 
 // ============================================================================

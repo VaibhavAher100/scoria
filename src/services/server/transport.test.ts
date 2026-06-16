@@ -2,8 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as net from 'node:net';
 import { randomUUID } from 'node:crypto';
+import { WebSocketServer } from 'ws';
 import { encodeFrame, FrameDecoder, FrameType } from './framing.ts';
-import { PipeTransport, type TransportMessage } from './transport.ts';
+import { PipeTransport, WebSocketTransport, type TransportMessage } from './transport.ts';
 
 /** Spin up a named-pipe echo server that replies to each frame it receives. */
 function startEchoPipe(): Promise<{ path: string; server: net.Server }> {
@@ -90,4 +91,50 @@ test('PipeTransport does not send after close', async () => {
   transport.sendBinary(new Uint8Array([9]));
 
   await new Promise<void>((resolve) => server.close(() => resolve()));
+});
+
+/** Start a loopback WebSocket server that records every text message it gets. */
+function startRecordingWsServer(): Promise<{ port: number; wss: WebSocketServer; received: string[] }> {
+  const received: string[] = [];
+  const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 });
+  wss.on('connection', (socket) => {
+    socket.on('message', (data: Buffer) => received.push(data.toString()));
+  });
+  return new Promise((resolve) => {
+    wss.on('listening', () => {
+      const port = (wss.address() as { port: number }).port;
+      resolve({ port, wss, received });
+    });
+  });
+}
+
+test('WebSocketTransport sends the auth token as its first frame', async () => {
+  const { port, wss, received } = await startRecordingWsServer();
+  const transport = new WebSocketTransport(`ws://127.0.0.1:${port}`, 'secret-token');
+
+  await transport.connect({ onMessage: () => {}, onClose: () => {}, onError: () => {} });
+  // App message must arrive AFTER the auth frame.
+  transport.send(JSON.stringify({ module: 'pty', type: 'init' }));
+  await waitFor(() => received.length >= 2);
+
+  assert.deepEqual(JSON.parse(received[0]), { type: 'auth', token: 'secret-token' });
+  assert.deepEqual(JSON.parse(received[1]), { module: 'pty', type: 'init' });
+
+  transport.close();
+  await new Promise<void>((resolve) => wss.close(() => resolve()));
+});
+
+test('WebSocketTransport sends no auth frame when no token is set', async () => {
+  const { port, wss, received } = await startRecordingWsServer();
+  const transport = new WebSocketTransport(`ws://127.0.0.1:${port}`);
+
+  await transport.connect({ onMessage: () => {}, onClose: () => {}, onError: () => {} });
+  transport.send(JSON.stringify({ module: 'pty', type: 'init' }));
+  await waitFor(() => received.length >= 1);
+
+  // First (and only) message is the app message, never an auth frame.
+  assert.deepEqual(JSON.parse(received[0]), { module: 'pty', type: 'init' });
+
+  transport.close();
+  await new Promise<void>((resolve) => wss.close(() => resolve()));
 });

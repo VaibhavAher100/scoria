@@ -113,6 +113,10 @@ export class ServerManager {
   /** Server named-pipe path (Windows named-pipe transport) */
   private pipePath: string | null = null;
 
+  /** Capability token for the WebSocket fallback (authenticated before any
+   * command). Null for the pipe/UDS transports, which use OS-enforced auth. */
+  private authToken: string | null = null;
+
   /**
    * PID of a daemon we re-discovered and reused rather than spawned (Part B).
    * We hold no `ChildProcess` handle for it, so teardown kills it by pid.
@@ -317,6 +321,7 @@ export class ServerManager {
     // Clear state
     this.port = null;
     this.pipePath = null;
+    this.authToken = null;
     this.serverStartPromise = null;
     this.wsConnectPromise = null;
     
@@ -482,6 +487,7 @@ export class ServerManager {
         });
       } else {
         this.port = info.port ?? null;
+        this.authToken = info.token ?? null;
         debugLog(`[ServerManager] 服务器已启动，端口: ${info.port}`);
       }
       this.restartAttempts = 0;
@@ -693,7 +699,12 @@ export class ServerManager {
           if (hasPipe || hasPort) {
             window.clearTimeout(timeout);
             this.process?.stdout?.off('data', onData);
-            debugLog('[ServerManager] 解析到服务器信息:', info);
+            // Redact the capability token: never print a live secret, even in
+            // debug logs (devtools console can be screen-shared or copied).
+            debugLog('[ServerManager] 解析到服务器信息:', {
+              ...info,
+              token: info.token ? '<redacted>' : undefined,
+            });
             resolve(info);
             return;
           }
@@ -730,7 +741,7 @@ export class ServerManager {
     if (this.port) {
       const wsUrl = `ws://127.0.0.1:${this.port}`;
       debugLog('[ServerManager] 连接传输 (WebSocket):', wsUrl);
-      return new WebSocketTransport(wsUrl);
+      return new WebSocketTransport(wsUrl, this.authToken ?? undefined);
     }
     return null;
   }
@@ -965,6 +976,7 @@ export class ServerManager {
       this.reusedDaemonPid = null;
       this.pipePath = null;
       this.port = null;
+      this.authToken = null;
       this.serverStartPromise = null;
       void this.ensureServer().catch((error) => {
         errorLog('[ServerManager] 重用守护进程断开后重启失败:', error);
@@ -1118,6 +1130,7 @@ export class ServerManager {
         this.process = null;
         this.port = null;
         this.pipePath = null;
+        this.authToken = null;
         this.serverStartPromise = null;
         this.wsConnectPromise = null;
       }
