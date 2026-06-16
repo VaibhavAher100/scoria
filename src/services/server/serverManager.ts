@@ -35,6 +35,7 @@ import { WebSocketTransport, PipeTransport } from './transport.ts';
 import type { DaemonRecord } from './daemonRecord.ts';
 import {
   PIPE_NAME_RE,
+  SOCKET_PATH_RE,
   serializeDaemonRecord,
   parseDaemonRecord,
   isVersionCompatible,
@@ -441,9 +442,10 @@ export class ServerManager {
       await this.ensureExecutable(binaryPath);
 
       // Part B: before spawning, try to re-discover and reuse a daemon left
-      // running by a prior plugin instance (e.g. across a reload). Only the
-      // pipe transport persists a daemon worth reusing.
-      if (this.usePipe() && await this.tryReuseDaemon()) {
+      // running by a prior plugin instance (e.g. across a reload). Both the pipe
+      // (Windows) and the Unix socket (macOS/Linux) persist a daemon worth
+      // reusing; the WS fallback has no persistence story.
+      if ((this.usePipe() || this.useSocket()) && await this.tryReuseDaemon()) {
         this.restartAttempts = 0;
         this.setupServerExitHandler(); // no-op without a child handle; transport-close drives reconnect
         this.emit('server-started', 0);
@@ -494,8 +496,8 @@ export class ServerManager {
         this.pipePath = info.pipe;
         debugLog(`[ServerManager] 服务器已启动，命名管道: ${info.pipe}`);
         // Record the live daemon so a reloaded plugin can re-discover it (Part B).
-        // Only the pipe transport carries a daemon worth re-discovering; the WS
-        // fallback has no persistence story until UDS (M3).
+        // The socket branch below does the same for Unix; the WS fallback has no
+        // persistence story.
         this.writeDaemonRecord({
           pipe: info.pipe,
           pid: this.process.pid ?? 0,
@@ -505,8 +507,14 @@ export class ServerManager {
       } else if (info.socket) {
         this.socketPath = info.socket;
         debugLog(`[ServerManager] 服务器已启动，Unix 套接字: ${info.socket}`);
-        // Reload re-discovery for the socket transport lands in S3b; until then
-        // a reloaded plugin spawns a fresh daemon and the orphaned one idle-exits.
+        // Record the live daemon so a reloaded plugin can re-discover it over the
+        // socket (S3b reload survival on Unix), mirroring the pipe branch above.
+        this.writeDaemonRecord({
+          socket: info.socket,
+          pid: this.process.pid ?? 0,
+          binaryVersion: this.version,
+          startedAt: new Date().toISOString(),
+        });
       } else {
         this.port = info.port ?? null;
         this.authToken = info.token ?? null;
@@ -718,7 +726,7 @@ export class ServerManager {
 
           const hasPipe = typeof info.pipe === 'string' && PIPE_NAME_RE.test(info.pipe);
           const hasPort = typeof info.port === 'number' && info.port > 0;
-          const hasSocket = typeof info.socket === 'string' && info.socket.length > 0;
+          const hasSocket = typeof info.socket === 'string' && SOCKET_PATH_RE.test(info.socket);
           if (hasPipe || hasPort || hasSocket) {
             window.clearTimeout(timeout);
             this.process?.stdout?.off('data', onData);
@@ -831,10 +839,11 @@ export class ServerManager {
    * user-only DACL, only our own account could have created.
    *
    * Security: the record is a same-user file treated as untrusted input.
-   * `parseDaemonRecord` enforces `PIPE_NAME_RE`, so a doctored record cannot
-   * steer us at a foreign-*named* pipe; reaching a pipe owned by a *different
-   * user* is blocked by the DACL. A same-user process squatting a `termy-<uuid>`
-   * name is inside the trusted (same-user) threat model.
+   * `parseDaemonRecord` enforces `PIPE_NAME_RE` / `SOCKET_PATH_RE`, so a doctored
+   * record cannot steer us at a foreign-*named* pipe or an arbitrary socket path;
+   * reaching an endpoint owned by a *different user* is blocked by the pipe DACL
+   * (Windows) or the 0600/0700 socket perms (Unix). A same-user process squatting
+   * a `termy-<uuid>` name is inside the trusted (same-user) threat model.
    */
   private async tryReuseDaemon(): Promise<boolean> {
     const record = this.readDaemonRecord();
@@ -842,23 +851,31 @@ export class ServerManager {
       return false;
     }
 
-    // Probe by attempting to connect to the persisted pipe.
-    this.pipePath = record.pipe;
+    // Probe by attempting to connect to the persisted endpoint. The record
+    // carries exactly one (parseDaemonRecord guarantees it); both transports
+    // ride PipeTransport, so the only difference is which field we restore.
+    const endpoint = record.pipe ?? record.socket;
+    if (record.pipe) {
+      this.pipePath = record.pipe;
+    } else {
+      this.socketPath = record.socket ?? null;
+    }
     try {
       await this.connectTransport();
     } catch (error) {
-      // Dead/stale pipe: the daemon is gone. Spawn fresh; do NOT kill the pid
+      // Dead/stale endpoint: the daemon is gone. Spawn fresh; do NOT kill the pid
       // (it may have been recycled onto an unrelated process).
       debugWarn('[ServerManager] 探测已有守护进程失败，将重新启动:', error);
       this.pipePath = null;
+      this.socketPath = null;
       this.transport = null;
       this.wsConnectPromise = null;
       this.clearDaemonRecord();
       return false;
     }
 
-    // The pipe is live. If the daemon speaks an older protocol, replace it:
-    // tear down the probe connection, kill the (now confirmed-live, ours-by-DACL)
+    // The endpoint is live. If the daemon speaks an older protocol, replace it:
+    // tear down the probe connection, kill the (now confirmed-live, ours-by-perms)
     // daemon, and fall through to a fresh spawn. Never reattach across versions.
     if (!isVersionCompatible(record, this.version)) {
       debugLog(
@@ -873,6 +890,7 @@ export class ServerManager {
       this.transport = null;
       this.wsConnectPromise = null;
       this.pipePath = null;
+      this.socketPath = null;
       this.killByPid(record.pid);
       this.clearDaemonRecord();
       return false;
@@ -880,7 +898,7 @@ export class ServerManager {
 
     // Connected to a live, version-matched daemon we did not spawn.
     this.reusedDaemonPid = record.pid;
-    debugLog(`[ServerManager] 已重用现有守护进程 (pid ${record.pid}): ${record.pipe}`);
+    debugLog(`[ServerManager] 已重用现有守护进程 (pid ${record.pid}): ${endpoint}`);
     return true;
   }
 

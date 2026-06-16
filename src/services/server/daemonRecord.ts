@@ -21,9 +21,27 @@
  */
 export const PIPE_NAME_RE = /^\\\\\.\\pipe\\termy-[0-9a-f-]{36}$/i;
 
+/**
+ * Shape the persisted (and announced) Unix-socket path must match:
+ * `<base>/termy-<uuid>/daemon.sock`, the structure `unix.rs::new_socket_path`
+ * always produces (a per-start GUID-named 0700 directory under
+ * `$XDG_RUNTIME_DIR` or the temp dir, with a fixed `daemon.sock` node). The
+ * variable `<base>` is matched loosely (any non-empty, slash/NUL/newline-free
+ * components, but no bare `..` traversal segment), while the GUID directory +
+ * fixed filename are pinned - the socket analogue of `PIPE_NAME_RE`. So a
+ * tampered sidecar cannot steer the client to `connect()` a path outside this
+ * shape; reaching a socket owned by a *different user* is separately blocked by
+ * the 0600 socket inside the 0700 dir (a same-user squatter is inside the
+ * trusted threat model, same as the pipe).
+ */
+export const SOCKET_PATH_RE =
+  /^\/(?:(?!\.\.\/)[^/\0\n]+\/)*termy-[0-9a-f-]{36}\/daemon\.sock$/i;
+
 export interface DaemonRecord {
-  /** The daemon's named-pipe path. */
-  pipe: string;
+  /** The daemon's named-pipe path (Windows). Exactly one of pipe/socket is set. */
+  pipe?: string;
+  /** The daemon's Unix domain socket path (macOS/Linux). Exactly one of pipe/socket is set. */
+  socket?: string;
   /** The daemon process id (used only for kill-on-version-skew, never blind-killed). */
   pid: number;
   /** The binary version the daemon was started with. Reattach across versions is refused. */
@@ -39,9 +57,11 @@ export function serializeDaemonRecord(record: DaemonRecord): string {
 
 /**
  * Parse + validate a sidecar file's contents. Returns null on any malformed or
- * out-of-contract input (bad JSON, wrong types, a pipe path that fails
- * `PIPE_NAME_RE`, a non-positive pid). Treated as a trust boundary: the file is
- * same-user but may be stale or doctored, so every field is checked before use.
+ * out-of-contract input (bad JSON, wrong types, an endpoint that fails its
+ * pattern, a non-positive pid). A record must carry EXACTLY ONE endpoint - a
+ * pipe (Windows) or a socket (Unix); both-or-neither is rejected as ambiguous.
+ * Treated as a trust boundary: the file is same-user but may be stale or
+ * doctored, so every field is checked before use.
  */
 export function parseDaemonRecord(raw: string): DaemonRecord | null {
   let data: unknown;
@@ -54,7 +74,17 @@ export function parseDaemonRecord(raw: string): DaemonRecord | null {
     return null;
   }
   const r = data as Record<string, unknown>;
-  if (typeof r.pipe !== 'string' || !PIPE_NAME_RE.test(r.pipe)) {
+
+  const hasPipe = typeof r.pipe === 'string';
+  const hasSocket = typeof r.socket === 'string';
+  // Exactly one endpoint. `===` rejects both (ambiguous) and neither (no target).
+  if (hasPipe === hasSocket) {
+    return null;
+  }
+  if (hasPipe && !PIPE_NAME_RE.test(r.pipe as string)) {
+    return null;
+  }
+  if (hasSocket && !SOCKET_PATH_RE.test(r.socket as string)) {
     return null;
   }
   if (typeof r.pid !== 'number' || !Number.isInteger(r.pid) || r.pid <= 0) {
@@ -67,7 +97,7 @@ export function parseDaemonRecord(raw: string): DaemonRecord | null {
     return null;
   }
   return {
-    pipe: r.pipe,
+    ...(hasPipe ? { pipe: r.pipe as string } : { socket: r.socket as string }),
     pid: r.pid,
     binaryVersion: r.binaryVersion,
     startedAt: r.startedAt,

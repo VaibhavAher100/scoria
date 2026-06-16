@@ -8,6 +8,7 @@ import {
 } from './daemonRecord.ts';
 
 const VALID_PIPE = '\\\\.\\pipe\\termy-12345678-1234-1234-1234-1234567890ab';
+const VALID_SOCKET = '/run/user/1000/termy-12345678-1234-1234-1234-1234567890ab/daemon.sock';
 
 function validRecord(): DaemonRecord {
   return {
@@ -18,10 +19,59 @@ function validRecord(): DaemonRecord {
   };
 }
 
-test('round-trips a valid record', () => {
+function validSocketRecord(): DaemonRecord {
+  return {
+    socket: VALID_SOCKET,
+    pid: 4242,
+    binaryVersion: '1.3.0',
+    startedAt: '2026-06-15T12:00:00.000Z',
+  };
+}
+
+test('round-trips a valid pipe record', () => {
   const record = validRecord();
   const parsed = parseDaemonRecord(serializeDaemonRecord(record));
   assert.deepEqual(parsed, record);
+});
+
+test('round-trips a valid socket record', () => {
+  const record = validSocketRecord();
+  const parsed = parseDaemonRecord(serializeDaemonRecord(record));
+  assert.deepEqual(parsed, record);
+});
+
+test('accepts a socket under the system temp dir (no XDG_RUNTIME_DIR)', () => {
+  const record = {
+    ...validSocketRecord(),
+    socket: '/var/folders/ab/T/termy-12345678-1234-1234-1234-1234567890ab/daemon.sock',
+  };
+  assert.deepEqual(parseDaemonRecord(JSON.stringify(record)), record);
+});
+
+test('rejects a socket path that fails SOCKET_PATH_RE', () => {
+  // Wrong filename, wrong dir prefix, relative path, and a traversal attempt.
+  for (const socket of [
+    '/run/user/1000/termy-12345678-1234-1234-1234-1234567890ab/evil.sock',
+    '/run/user/1000/other-12345678-1234-1234-1234-1234567890ab/daemon.sock',
+    '/tmp/daemon.sock',
+    'termy-12345678-1234-1234-1234-1234567890ab/daemon.sock',
+    '/tmp/termy-12345678-1234-1234-1234-1234567890ab/../../evil/daemon.sock',
+    // A `..` traversal segment in the variable base is rejected, so a doctored
+    // sidecar cannot escape the matched shape onto an arbitrary path.
+    '/home/victim/.config/../../../tmp/attacker/termy-12345678-1234-1234-1234-1234567890ab/daemon.sock',
+  ]) {
+    assert.equal(parseDaemonRecord(JSON.stringify({ ...validSocketRecord(), socket })), null, socket);
+  }
+});
+
+test('rejects a record carrying BOTH a pipe and a socket', () => {
+  const both = { ...validRecord(), socket: VALID_SOCKET };
+  assert.equal(parseDaemonRecord(JSON.stringify(both)), null);
+});
+
+test('rejects a record carrying NEITHER a pipe nor a socket', () => {
+  const { pipe: _pipe, ...neither } = validRecord();
+  assert.equal(parseDaemonRecord(JSON.stringify(neither)), null);
 });
 
 test('rejects malformed JSON', () => {
