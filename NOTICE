@@ -1,0 +1,34 @@
+Scoria
+======
+
+Scoria is a modified fork of Termy.
+
+Original work:
+  Termy - https://github.com/ZyphrZero/Termy
+  Copyright (C) 2026 ZyphrZero and Termy contributors.
+
+Modifications:
+  Copyright (C) 2026 Vaibhav Aher.
+
+Both the original work and these modifications are licensed under the GNU
+General Public License, version 3.0 (GPL-3.0). See the LICENSE file for the
+full terms.
+
+Significant changes made in this fork (from 2026-06-14 onward):
+
+  - Replaced Termy's unauthenticated localhost WebSocket transport with
+    OS-authenticated transports: a Windows named pipe (per-user DACL), a Unix
+    domain socket (mode 0600 inside a per-user 0700 directory) on macOS and
+    Linux, and a 256-bit capability-token authenticated WebSocket as a
+    fallback.
+
+  - Added a daemon-owned session model so terminal sessions survive an
+    Obsidian reload: bounded output replay, reattach by session id, orphan
+    timeouts, and re-discovery after a full reload.
+
+  - Changed server-binary distribution to fetch only from this project's own
+    GitHub release host (removing the third-party binary host), with build
+    provenance attestation.
+
+This NOTICE does not change the license. Where this NOTICE and the LICENSE
+conflict, the GPL-3.0 terms in LICENSE govern.
