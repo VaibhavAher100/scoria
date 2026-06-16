@@ -64,12 +64,9 @@ termy-<version>.zip
 - `release.yml` 会读取 `CHANGELOG.md` 中与 tag 同名的章节，例如 tag `1.0.0` 对应 `## [1.0.0]`
 - 如果找不到对应章节，Release 会失败，避免发布说明缺失或错配
 
-**R2 同步:**
-- `release.yml` 会调用 `scripts/upload-r2-assets.js`
-- Release job 固定运行在 Node 22 上，并固定使用 `wrangler@4.88.0`
-- 需要配置 GitHub Actions secrets:
-  - `CLOUDFLARE_API_TOKEN`
-  - `CLOUDFLARE_ACCOUNT_ID`
+**二进制分发:**
+- `release.yml` 从源码构建各平台 `termy-server`，连同 `.sha256` 一起作为 GitHub Release 资源发布
+- 插件只从本仓库的 GitHub Release 下载二进制（不再使用第三方 R2 主机）
 
 ## 使用
 
