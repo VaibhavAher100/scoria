@@ -113,6 +113,9 @@ export class ServerManager {
   /** Server named-pipe path (Windows named-pipe transport) */
   private pipePath: string | null = null;
 
+  /** Server Unix domain socket path (macOS/Linux transport) */
+  private socketPath: string | null = null;
+
   /** Capability token for the WebSocket fallback (authenticated before any
    * command). Null for the pipe/UDS transports, which use OS-enforced auth. */
   private authToken: string | null = null;
@@ -321,6 +324,7 @@ export class ServerManager {
     // Clear state
     this.port = null;
     this.pipePath = null;
+    this.socketPath = null;
     this.authToken = null;
     this.serverStartPromise = null;
     this.wsConnectPromise = null;
@@ -344,10 +348,10 @@ export class ServerManager {
   }
 
   /**
-   * Whether a server endpoint (port or pipe) is known
+   * Whether a server endpoint (port, pipe, or socket) is known
    */
   private hasEndpoint(): boolean {
-    return this.port !== null || this.pipePath !== null;
+    return this.port !== null || this.pipePath !== null || this.socketPath !== null;
   }
 
   /**
@@ -355,6 +359,14 @@ export class ServerManager {
    */
   private usePipe(): boolean {
     return process.platform === 'win32';
+  }
+
+  /**
+   * Whether this platform uses the Unix domain socket transport (macOS/Linux).
+   * Other platforms fall back to the authenticated loopback WebSocket.
+   */
+  private useSocket(): boolean {
+    return process.platform === 'darwin' || process.platform === 'linux';
   }
 
   /**
@@ -438,9 +450,14 @@ export class ServerManager {
         return;
       }
 
-      // Start the process. Windows uses the OS-authenticated named pipe; every
-      // other platform stays on the loopback WebSocket until UDS lands (M3).
-      const serverArgs = this.usePipe() ? ['--pipe'] : ['--port', '0'];
+      // Start the process. Windows uses the OS-authenticated named pipe,
+      // macOS/Linux the OS-authenticated Unix socket; any other platform falls
+      // back to the authenticated loopback WebSocket.
+      const serverArgs = this.usePipe()
+        ? ['--pipe']
+        : this.useSocket()
+          ? ['--socket']
+          : ['--port', '0'];
       this.process = this.spawn(binaryPath, serverArgs, {
         // stderr is discarded, not piped: the daemon logs to stderr via
         // `eprintln!`, which PANICS on a broken-pipe write. Because the daemon
@@ -485,6 +502,11 @@ export class ServerManager {
           binaryVersion: this.version,
           startedAt: new Date().toISOString(),
         });
+      } else if (info.socket) {
+        this.socketPath = info.socket;
+        debugLog(`[ServerManager] 服务器已启动，Unix 套接字: ${info.socket}`);
+        // Reload re-discovery for the socket transport lands in S3b; until then
+        // a reloaded plugin spawns a fresh daemon and the orphaned one idle-exits.
       } else {
         this.port = info.port ?? null;
         this.authToken = info.token ?? null;
@@ -696,7 +718,8 @@ export class ServerManager {
 
           const hasPipe = typeof info.pipe === 'string' && PIPE_NAME_RE.test(info.pipe);
           const hasPort = typeof info.port === 'number' && info.port > 0;
-          if (hasPipe || hasPort) {
+          const hasSocket = typeof info.socket === 'string' && info.socket.length > 0;
+          if (hasPipe || hasPort || hasSocket) {
             window.clearTimeout(timeout);
             this.process?.stdout?.off('data', onData);
             // Redact the capability token: never print a live secret, even in
@@ -733,10 +756,13 @@ export class ServerManager {
    * Returns null if no endpoint is known yet.
    */
   private buildTransport(): Transport | null {
-    if (this.pipePath) {
-      debugLog('[ServerManager] 连接传输 (命名管道):', this.pipePath);
+    // A named pipe and a Unix socket are both path-addressed stream sockets, so
+    // both ride the same PipeTransport (net.connect handles either path kind).
+    const ipcPath = this.pipePath ?? this.socketPath;
+    if (ipcPath) {
+      debugLog('[ServerManager] 连接传输 (IPC 路径):', ipcPath);
       const connector: SocketConnector = (path) => this.net.connect(path);
-      return new PipeTransport(this.pipePath, connector);
+      return new PipeTransport(ipcPath, connector);
     }
     if (this.port) {
       const wsUrl = `ws://127.0.0.1:${this.port}`;
@@ -975,6 +1001,7 @@ export class ServerManager {
       debugLog('[ServerManager] 重用的守护进程连接断开，重新探测/启动');
       this.reusedDaemonPid = null;
       this.pipePath = null;
+      this.socketPath = null;
       this.port = null;
       this.authToken = null;
       this.serverStartPromise = null;
@@ -1130,6 +1157,7 @@ export class ServerManager {
         this.process = null;
         this.port = null;
         this.pipePath = null;
+        this.socketPath = null;
         this.authToken = null;
         this.serverStartPromise = null;
         this.wsConnectPromise = null;
