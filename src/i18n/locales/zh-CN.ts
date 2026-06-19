@@ -69,6 +69,8 @@ export const zhCN: TranslationKeys = {
 
   commands: {
     openTerminal: '打开Termy终端',
+    openTerminalCurrentFolder: '在当前文件所在文件夹打开终端',
+    openTerminalHere: '在此处打开终端',
     showChangelog: 'Termy：显示更新日志',
     terminalSearch: '终端：搜索',
     terminalClear: '终端：清屏',

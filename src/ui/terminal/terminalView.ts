@@ -73,6 +73,9 @@ export class TerminalView extends ItemView {
   private initReject: ((error: Error) => void) | null = null;
   /** Session id restored from view state, used to reattach across a reload (Part B). */
   private restoredSessionId: string | null = null;
+  // One-shot working directory requested at open time (e.g. "open terminal in
+  // this folder"). Consumed by the first fresh spawn; not persisted to state.
+  private requestedCwd: string | null = null;
 
   private readonly fs: FsModule;
   private readonly path: PathModule;
@@ -114,6 +117,12 @@ export class TerminalView extends ItemView {
       const sessionId = (state as { sessionId?: unknown }).sessionId;
       if (typeof sessionId === 'string' && sessionId) {
         this.restoredSessionId = sessionId;
+      }
+    }
+    if (state && typeof state === 'object' && 'cwd' in state) {
+      const cwd = (state as { cwd?: unknown }).cwd;
+      if (typeof cwd === 'string' && cwd) {
+        this.requestedCwd = cwd;
       }
     }
     await super.setState(state, result);
@@ -370,7 +379,10 @@ export class TerminalView extends ItemView {
       // and the leaf reopens) spawns fresh rather than chasing a stale id.
       const restoreSessionId = this.restoredSessionId ?? undefined;
       this.restoredSessionId = null;
-      this.terminalInstance = await this.terminalService.createTerminal(restoreSessionId);
+      // A requested cwd only applies to a fresh spawn, never a reattach.
+      const cwdOverride = restoreSessionId ? undefined : (this.requestedCwd ?? undefined);
+      this.requestedCwd = null;
+      this.terminalInstance = await this.terminalService.createTerminal(restoreSessionId, cwdOverride);
       this.initResolve?.(this.terminalInstance);
       this.initResolve = null;
       this.initReject = null;

@@ -183,7 +183,7 @@ export class TerminalService {
    * @returns The created terminal instance
    * @throws Error if terminal creation fails
    */
-  async createTerminal(restoreSessionId?: string): Promise<TerminalInstance> {
+  async createTerminal(restoreSessionId?: string, cwdOverride?: string): Promise<TerminalInstance> {
     try {
       // Ensure the server is running
       await this.serverManager.ensureServer();
@@ -193,9 +193,14 @@ export class TerminalService {
       // Use the preloaded module
       const { TerminalInstance } = await preloadTerminalInstance();
       
-      // Get the working directory if auto-entering the vault directory is enabled
+      // Resolve the working directory. An explicit override (e.g. "open terminal
+      // in this folder") wins; otherwise fall back to the vault directory when
+      // auto-enter is enabled.
       let cwd: string | undefined;
-      if (this.settings.autoEnterVaultDirectory) {
+      if (cwdOverride) {
+        cwd = cwdOverride;
+        debugLog(`[TerminalService] 使用指定工作目录: ${cwd}`);
+      } else if (this.settings.autoEnterVaultDirectory) {
         cwd = this.getVaultPath();
         if (cwd) {
           debugLog(`[TerminalService] 自动进入项目目录: ${cwd}`);

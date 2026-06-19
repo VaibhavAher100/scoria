@@ -69,6 +69,8 @@ export const ru: TranslationKeys = {
 
   commands: {
     openTerminal: 'Открыть терминал Termy',
+    openTerminalCurrentFolder: 'Открыть терминал в папке текущего файла',
+    openTerminalHere: 'Открыть терминал здесь',
     showChangelog: 'Termy: показать список изменений',
     terminalSearch: 'Терминал: поиск',
     terminalClear: 'Терминал: очистить экран',

@@ -69,6 +69,8 @@ export const en: TranslationKeys = {
 
   commands: {
     openTerminal: 'Open terminal',
+    openTerminalCurrentFolder: 'Open terminal in current file folder',
+    openTerminalHere: 'Open terminal here',
     showChangelog: 'Termy: show changelog',
     terminalSearch: 'Terminal: search',
     terminalClear: 'Terminal: clear screen',

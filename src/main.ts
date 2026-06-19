@@ -1,5 +1,5 @@
-import type { View, WorkspaceLeaf } from 'obsidian';
-import { addIcon, FileSystemAdapter, Modal, Notice, Plugin, normalizePath, setIcon, setTooltip } from 'obsidian';
+import type { Menu, TAbstractFile, View, WorkspaceLeaf } from 'obsidian';
+import { addIcon, FileSystemAdapter, Modal, Notice, Plugin, TFolder, normalizePath, setIcon, setTooltip } from 'obsidian';
 import {
   DEFAULT_PRESET_SCRIPTS,
   DEFAULT_TERMINAL_SETTINGS,
@@ -586,9 +586,9 @@ export default class TerminalPlugin extends Plugin {
   /**
    * Activate the terminal view
    */
-  async activateTerminalView(targetLeaf?: WorkspaceLeaf): Promise<void> {
+  async activateTerminalView(targetLeaf?: WorkspaceLeaf, cwd?: string): Promise<void> {
     const { workspace } = this.app;
-    
+
     const leaf = targetLeaf ?? this.getLeafForNewTerminal();
 
     // If locking new instances is enabled, pin the tab
@@ -599,12 +599,36 @@ export default class TerminalPlugin extends Plugin {
     await leaf.setViewState({
       type: TERMINAL_VIEW_TYPE,
       active: this.settings.focusNewInstance,
+      state: cwd ? { cwd } : undefined,
     });
 
     // If focusing new instances is enabled, switch to the new tab
     if (this.settings.focusNewInstance) {
       workspace.setActiveLeaf(leaf, { focus: true });
     }
+  }
+
+  /**
+   * Vault-relative folder for an abstract file: the folder itself, or a file's
+   * parent folder.
+   */
+  private folderPathOf(file: TAbstractFile): string {
+    if (file instanceof TFolder) return file.path;
+    return file.parent?.path ?? '/';
+  }
+
+  /**
+   * Resolve a vault-relative folder to an absolute path and open a new terminal
+   * there. Falls back to a default terminal if the path cannot be resolved.
+   */
+  private async openTerminalInFolder(folderRelPath: string): Promise<void> {
+    const adapter = this.app.vault.adapter;
+    if (!(adapter instanceof FileSystemAdapter)) {
+      await this.activateTerminalView();
+      return;
+    }
+    const abs = adapter.getFullPath(normalizePath(folderRelPath || '/'));
+    await this.activateTerminalView(undefined, abs);
   }
 
   async toggleAlwaysOnTopTerminal(terminalView?: TerminalView | null): Promise<void> {
@@ -989,6 +1013,41 @@ export default class TerminalPlugin extends Plugin {
         return true;
       }
     });
+
+    this.addCommand({
+      id: 'open-terminal-current-folder',
+      name: t('commands.openTerminalCurrentFolder'),
+      checkCallback: (checking: boolean) => {
+        if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
+          return false;
+        }
+        const file = this.app.workspace.getActiveFile();
+        if (!file) {
+          return false;
+        }
+        if (!checking) {
+          void this.openTerminalInFolder(file.parent?.path ?? '/');
+        }
+        return true;
+      },
+    });
+
+    // Right-click a file or folder in the explorer -> open a terminal there.
+    this.registerEvent(
+      this.app.workspace.on('file-menu', (menu: Menu, file: TAbstractFile) => {
+        if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
+          return;
+        }
+        menu.addItem((item) => {
+          item
+            .setTitle(t('commands.openTerminalHere'))
+            .setIcon(TERMY_RIBBON_ICON_ID)
+            .onClick(() => {
+              void this.openTerminalInFolder(this.folderPathOf(file));
+            });
+        });
+      })
+    );
 
     this.addCommand({
       id: 'show-changelog',

@@ -69,6 +69,8 @@ export const ko: TranslationKeys = {
 
   commands: {
     openTerminal: 'Termy 터미널 열기',
+    openTerminalCurrentFolder: '현재 파일 폴더에서 터미널 열기',
+    openTerminalHere: '여기에서 터미널 열기',
     showChangelog: 'Termy: 변경 로그 보기',
     terminalSearch: '터미널: 검색',
     terminalClear: '터미널: 화면 지우기',

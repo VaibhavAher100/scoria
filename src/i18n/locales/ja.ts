@@ -69,6 +69,8 @@ export const ja: TranslationKeys = {
 
   commands: {
     openTerminal: 'Termyターミナルを開く',
+    openTerminalCurrentFolder: '現在のファイルのフォルダーでターミナルを開く',
+    openTerminalHere: 'ここでターミナルを開く',
     showChangelog: 'Termy: 更新ログを表示',
     terminalSearch: 'ターミナル: 検索',
     terminalClear: 'ターミナル: 画面をクリア',

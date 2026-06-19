@@ -81,6 +81,8 @@ export interface TranslationKeys {
   // Commands
   commands: {
     openTerminal: string;
+    openTerminalCurrentFolder: string;
+    openTerminalHere: string;
     showChangelog: string;
     terminalSearch: string;
     terminalClear: string;
