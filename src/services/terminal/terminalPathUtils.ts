@@ -223,6 +223,45 @@ export function obsidianUriToVaultPath(uri: string): string | null {
   }
 }
 
+export interface WikilinkRange {
+  /** 0-based index of the first `[` of the `[[...]]` token in the line. */
+  startIndex: number;
+  /** Exclusive end index (just past the closing `]]`). */
+  endIndex: number;
+  /** Link target with any `|alias`, `#heading`, or `^block` stripped. */
+  linkpath: string;
+}
+
+const WIKILINK_PATTERN = /\[\[([^[\]\n]+?)\]\]/g;
+
+/**
+ * Find `[[wiki-link]]` tokens in a single line of terminal output. Returns the
+ * character ranges (for building xterm link decorations) and the resolved link
+ * target. Display aliases (`|`), headings (`#`), and block refs (`^`) are
+ * stripped from the target. Pure and synchronous so it is unit-testable.
+ */
+export function scanWikilinkRanges(line: string): WikilinkRange[] {
+  const ranges: WikilinkRange[] = [];
+  if (!line.includes('[[')) {
+    return ranges;
+  }
+
+  WIKILINK_PATTERN.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = WIKILINK_PATTERN.exec(line)) !== null) {
+    const target = match[1].split('|')[0].split('#')[0].split('^')[0].trim();
+    if (!target) {
+      continue;
+    }
+    ranges.push({
+      startIndex: match.index,
+      endIndex: match.index + match[0].length,
+      linkpath: target,
+    });
+  }
+  return ranges;
+}
+
 export function joinTerminalPaths(
   basePath: string,
   relativePath: string,

@@ -15,6 +15,7 @@ import {
   normalizeTerminalToken,
   normalizeVaultPath,
   obsidianUriToVaultPath,
+  scanWikilinkRanges,
 } from './terminalPathUtils.ts';
 
 test('normalizeTerminalToken strips wrappers and decodes escaped drag payload text', () => {
@@ -23,6 +24,31 @@ test('normalizeTerminalToken strips wrappers and decodes escaped drag payload te
     'file:///C:/Program Files/Termy'
   );
   assert.equal(normalizeTerminalToken('"[[Folder/File.md]]"'), '[[Folder/File.md]]');
+});
+
+test('scanWikilinkRanges finds links and strips alias/heading/block from the target', () => {
+  assert.deepEqual(scanWikilinkRanges('see [[Note]] now'), [
+    { startIndex: 4, endIndex: 12, linkpath: 'Note' },
+  ]);
+
+  const aliased = scanWikilinkRanges('[[Folder/Note|Display]]');
+  assert.equal(aliased.length, 1);
+  assert.equal(aliased[0].linkpath, 'Folder/Note');
+  assert.equal(aliased[0].startIndex, 0);
+  assert.equal(aliased[0].endIndex, 23);
+
+  assert.equal(scanWikilinkRanges('[[Note#Heading]]')[0].linkpath, 'Note');
+  assert.equal(scanWikilinkRanges('[[Note^block]]')[0].linkpath, 'Note');
+});
+
+test('scanWikilinkRanges handles multiple links and ignores incomplete/empty ones', () => {
+  const multi = scanWikilinkRanges('[[A]] and [[B]]');
+  assert.deepEqual(multi.map((r) => r.linkpath), ['A', 'B']);
+  assert.equal(multi[1].startIndex, 10);
+
+  assert.deepEqual(scanWikilinkRanges('no links here'), []);
+  assert.deepEqual(scanWikilinkRanges('[[]] empty'), []);
+  assert.deepEqual(scanWikilinkRanges('[[unterminated'), []);
 });
 
 test('normalizeTerminalRawToken strips wrappers without decoding URL separators', () => {

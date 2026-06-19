@@ -36,6 +36,7 @@ import {
   normalizeTerminalToken,
   normalizeVaultPath,
   obsidianUriToVaultPath,
+  scanWikilinkRanges,
   toPlatformPath,
 } from '../../services/terminal/terminalPathUtils';
 import { TERMINAL_FILE_URI_REGEX } from '../../services/terminal/terminalFileLinks';
@@ -66,6 +67,8 @@ export class TerminalView extends ItemView {
   private searchInput: HTMLInputElement | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private fileUriLinkAddon: WebLinksAddon | null = null;
+  private obsidianUriLinkAddon: WebLinksAddon | null = null;
+  private wikilinkLinkProvider: { dispose(): void } | null = null;
   private titleChangeCleanup: (() => void) | null = null;
   private searchStateCleanup: (() => void) | null = null;
   private initPromise: Promise<TerminalInstance> | null = null;
@@ -299,8 +302,7 @@ export class TerminalView extends ItemView {
 
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
-    this.fileUriLinkAddon?.dispose();
-    this.fileUriLinkAddon = null;
+    this.disposeTerminalLinkAddons();
     this.titleChangeCleanup?.();
     this.titleChangeCleanup = null;
     this.searchStateCleanup?.();
@@ -328,8 +330,7 @@ export class TerminalView extends ItemView {
     if (!terminal) return null;
 
     this.detachTerminalBindings();
-    this.fileUriLinkAddon?.dispose();
-    this.fileUriLinkAddon = null;
+    this.disposeTerminalLinkAddons();
     terminal.detach();
     this.terminalInstance = null;
     this.initPromise = Promise.resolve(terminal);
@@ -934,7 +935,7 @@ export class TerminalView extends ItemView {
       },
     };
 
-    this.fileUriLinkAddon?.dispose();
+    this.disposeTerminalLinkAddons();
     this.fileUriLinkAddon = new WebLinksAddon((event, uri) => {
       event.preventDefault();
       void this.openTerminalHyperlinkTarget(uri);
@@ -942,12 +943,74 @@ export class TerminalView extends ItemView {
       urlRegex: TERMINAL_FILE_URI_REGEX,
     });
     xterm.loadAddon(this.fileUriLinkAddon);
+
+    // Plain-text obsidian:// URIs printed by tools become clickable too.
+    this.obsidianUriLinkAddon = new WebLinksAddon((event, uri) => {
+      event.preventDefault();
+      void this.openTerminalHyperlinkTarget(uri);
+    }, {
+      urlRegex: /obsidian:\/\/[^\s'"]+/,
+    });
+    xterm.loadAddon(this.obsidianUriLinkAddon);
+
+    // [[wiki-links]] in output open the matching vault note.
+    this.wikilinkLinkProvider = xterm.registerLinkProvider({
+      provideLinks: (bufferLineNumber, callback) => {
+        const bufferLine = xterm.buffer.active.getLine(bufferLineNumber - 1);
+        if (!bufferLine) {
+          callback(undefined);
+          return;
+        }
+        const text = bufferLine.translateToString(true);
+        const ranges = scanWikilinkRanges(text);
+        if (ranges.length === 0) {
+          callback(undefined);
+          return;
+        }
+        callback(ranges.map((range) => ({
+          text: text.slice(range.startIndex, range.endIndex),
+          range: {
+            start: { x: range.startIndex + 1, y: bufferLineNumber },
+            end: { x: range.endIndex, y: bufferLineNumber },
+          },
+          activate: (event: MouseEvent) => {
+            event.preventDefault();
+            void this.openWikilinkTarget(range.linkpath);
+          },
+        })));
+      },
+    });
+  }
+
+  private disposeTerminalLinkAddons(): void {
+    this.fileUriLinkAddon?.dispose();
+    this.fileUriLinkAddon = null;
+    this.obsidianUriLinkAddon?.dispose();
+    this.obsidianUriLinkAddon = null;
+    this.wikilinkLinkProvider?.dispose();
+    this.wikilinkLinkProvider = null;
+  }
+
+  /** Open the vault note for a `[[link]]` or obsidian:// target. */
+  private async openWikilinkTarget(linkpath: string): Promise<void> {
+    const file = this.app.metadataCache.getFirstLinkpathDest(linkpath, '');
+    if (file) {
+      await this.openVaultFileReference(file);
+      return;
+    }
+    new Notice(t('notices.terminal.fileReferenceUnavailable'));
   }
 
   private async openTerminalHyperlinkTarget(target: string): Promise<void> {
     const filePath = fileUriToPlatformPath(target);
     if (filePath) {
       await this.openTerminalFileReference(filePath);
+      return;
+    }
+
+    const obsidianVaultPath = obsidianUriToVaultPath(target);
+    if (obsidianVaultPath) {
+      await this.openWikilinkTarget(obsidianVaultPath);
       return;
     }
 
