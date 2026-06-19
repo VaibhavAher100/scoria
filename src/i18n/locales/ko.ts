@@ -253,6 +253,8 @@ export const ko: TranslationKeys = {
       cursorStyleDesc: '터미널 커서 스타일',
       cursorBlink: '커서 깜박임',
       cursorBlinkDesc: '커서 깜박임 사용',
+      copyOnSelect: '선택 시 복사',
+      copyOnSelectDesc: '선택한 텍스트를 클립보드에 자동으로 복사',
       rendererSettings: '렌더러 설정',
       preferredRenderer: '선호 렌더러',
       preferredRendererDesc: '터미널 렌더링 엔진(WebGL은 빠르지만 호환성 문제가 있을 수 있음)',

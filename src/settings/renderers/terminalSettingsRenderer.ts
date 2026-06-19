@@ -546,6 +546,18 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
           });
         }));
 
+    // Copy on select
+    new Setting(container)
+      .setName(t('settingsDetails.terminal.copyOnSelect'))
+      .setDesc(t('settingsDetails.terminal.copyOnSelectDesc'))
+      .addToggle(toggle => toggle
+        .setValue(this.context.plugin.settings.copyOnSelect)
+        .onChange((value) => {
+          void this.updateAppearanceSetting(() => {
+            this.context.plugin.settings.copyOnSelect = value;
+          });
+        }));
+
     // Renderer type
     new Setting(container)
       .setName(t('settingsDetails.terminal.rendererType'))

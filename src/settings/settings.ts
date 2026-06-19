@@ -69,6 +69,7 @@ export interface TerminalSettings {
   fontFamily: string;
   cursorStyle: 'block' | 'underline' | 'bar';
   cursorBlink: boolean;
+  copyOnSelect: boolean;       // Auto-copy selected text to the clipboard on selection
 
   // Theme settings
   useObsidianTheme: boolean;      // Whether to use Obsidian theme colors
@@ -347,6 +348,7 @@ export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   fontFamily: 'Consolas, "Courier New", monospace',
   cursorStyle: 'block',
   cursorBlink: true,
+  copyOnSelect: true,
   useObsidianTheme: true,
   preferredRenderer: 'canvas',
   scrollback: 1000,

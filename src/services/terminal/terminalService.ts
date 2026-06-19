@@ -226,6 +226,7 @@ export class TerminalService {
         fontFamily: this.settings.fontFamily,
         cursorStyle: this.settings.cursorStyle,
         cursorBlink: this.settings.cursorBlink,
+        copyOnSelect: this.settings.copyOnSelect,
         scrollback: this.settings.scrollback,
         preferredRenderer: this.settings.preferredRenderer,
         useObsidianTheme: this.settings.useObsidianTheme,

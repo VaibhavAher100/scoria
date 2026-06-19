@@ -127,6 +127,7 @@ export interface TerminalOptions {
   fontFamily?: string;
   cursorStyle?: 'block' | 'underline' | 'bar';
   cursorBlink?: boolean;
+  copyOnSelect?: boolean;
   scrollback?: number;
   preferredRenderer?: 'canvas' | 'webgl';
   useObsidianTheme?: boolean;
@@ -739,6 +740,14 @@ export class TerminalInstance {
 
     this.xterm.attachCustomKeyEventHandler((event: KeyboardEvent) => {
       return keyboardProtocol.handleKeyboardEvent(event);
+    });
+
+    this.xterm.onSelectionChange(() => {
+      if (!this.options.copyOnSelect) return;
+      const selection = this.xterm.getSelection();
+      if (selection) {
+        this.writeClipboardFromTerminal(selection, 'copy on select');
+      }
     });
   }
 

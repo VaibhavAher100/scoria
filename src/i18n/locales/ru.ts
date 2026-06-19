@@ -253,6 +253,8 @@ export const ru: TranslationKeys = {
       cursorStyleDesc: 'Стиль курсора терминала',
       cursorBlink: 'Мигание курсора',
       cursorBlinkDesc: 'Включить мигание курсора',
+      copyOnSelect: 'Копировать при выделении',
+      copyOnSelectDesc: 'Автоматически копировать выделенный текст в буфер обмена',
       rendererSettings: 'Настройки рендерера',
       preferredRenderer: 'Предпочтительный рендерер',
       preferredRendererDesc: 'Движок рендеринга терминала (WebGL быстрее, но возможны проблемы совместимости)',

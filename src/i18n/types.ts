@@ -270,6 +270,8 @@ export interface TranslationKeys {
       cursorStyleDesc: string;
       cursorBlink: string;
       cursorBlinkDesc: string;
+      copyOnSelect: string;
+      copyOnSelectDesc: string;
       rendererSettings: string;
       preferredRenderer: string;
       preferredRendererDesc: string;

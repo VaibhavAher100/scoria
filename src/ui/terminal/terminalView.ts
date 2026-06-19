@@ -1189,6 +1189,7 @@ export class TerminalView extends ItemView {
       fontFamily: settings.fontFamily,
       cursorStyle: settings.cursorStyle,
       cursorBlink: settings.cursorBlink,
+      copyOnSelect: settings.copyOnSelect,
       useObsidianTheme: settings.useObsidianTheme,
       backgroundColor: settings.backgroundColor,
       foregroundColor: settings.foregroundColor,

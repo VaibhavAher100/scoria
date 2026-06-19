@@ -253,6 +253,8 @@ export const en: TranslationKeys = {
       cursorStyleDesc: 'Terminal cursor style',
       cursorBlink: 'Cursor blink',
       cursorBlinkDesc: 'Enable cursor blinking',
+      copyOnSelect: 'Copy on select',
+      copyOnSelectDesc: 'Automatically copy selected text to the clipboard',
       rendererSettings: 'Renderer settings',
       preferredRenderer: 'Preferred renderer',
       preferredRendererDesc: 'Terminal rendering engine (WebGL is faster but may have compatibility issues)',

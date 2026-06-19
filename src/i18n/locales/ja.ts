@@ -253,6 +253,8 @@ export const ja: TranslationKeys = {
       cursorStyleDesc: 'ターミナルのカーソルスタイル',
       cursorBlink: 'カーソル点滅',
       cursorBlinkDesc: 'カーソルの点滅を有効化',
+      copyOnSelect: '選択時にコピー',
+      copyOnSelectDesc: '選択したテキストを自動的にクリップボードへコピー',
       rendererSettings: 'レンダラー設定',
       preferredRenderer: '優先レンダラー',
       preferredRendererDesc: 'ターミナルの描画エンジン（WebGL は高速ですが互換性の問題がある場合があります）',

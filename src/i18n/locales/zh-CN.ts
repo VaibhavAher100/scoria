@@ -253,6 +253,8 @@ export const zhCN: TranslationKeys = {
       cursorStyleDesc: '终端光标样式',
       cursorBlink: '光标闪烁',
       cursorBlinkDesc: '启用光标闪烁',
+      copyOnSelect: '选择时复制',
+      copyOnSelectDesc: '自动将选中的文本复制到剪贴板',
       rendererSettings: '渲染器设置',
       preferredRenderer: '首选渲染器',
       preferredRendererDesc: '终端渲染引擎（WebGL 更快但可能存在兼容性问题）',
