@@ -257,6 +257,10 @@ export const ja: TranslationKeys = {
       cursorBlinkDesc: 'カーソルの点滅を有効化',
       copyOnSelect: '選択時にコピー',
       copyOnSelectDesc: '選択したテキストを自動的にクリップボードへコピー',
+      wikilinkAutocomplete: 'Wikiリンク オートコンプリート',
+      wikilinkAutocompleteDesc: 'ターミナルで [[ を入力して保管庫のノートを選択（任意。リテラルの括弧が必要なTUIに干渉する場合あり）',
+      wikilinkInsertMode: 'Wikiリンクの挿入形式',
+      wikilinkInsertModeDesc: '[[ が挿入する内容：Wikiリンク、保管庫相対パス、絶対パス',
       rendererSettings: 'レンダラー設定',
       preferredRenderer: '優先レンダラー',
       preferredRendererDesc: 'ターミナルの描画エンジン（WebGL は高速ですが互換性の問題がある場合があります）',
@@ -479,6 +483,12 @@ export const ja: TranslationKeys = {
     block: 'ブロック',
     underline: '下線',
     bar: 'バー',
+  },
+
+  wikilinkInsertModeOptions: {
+    wikilink: 'Wikiリンク（[[ノート]]）',
+    vaultPath: '保管庫パス（Folder/Note.md）',
+    absolutePath: '絶対パス',
   },
 
   rendererOptions: {

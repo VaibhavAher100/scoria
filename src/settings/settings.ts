@@ -70,6 +70,8 @@ export interface TerminalSettings {
   cursorStyle: 'block' | 'underline' | 'bar';
   cursorBlink: boolean;
   copyOnSelect: boolean;       // Auto-copy selected text to the clipboard on selection
+  wikilinkAutocomplete: boolean;  // Show a [[ note picker in the terminal (opt-in)
+  wikilinkInsertMode: 'wikilink' | 'vault-path' | 'absolute-path';  // What [[ inserts
 
   // Theme settings
   useObsidianTheme: boolean;      // Whether to use Obsidian theme colors
@@ -349,6 +351,8 @@ export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   cursorStyle: 'block',
   cursorBlink: true,
   copyOnSelect: true,
+  wikilinkAutocomplete: false,
+  wikilinkInsertMode: 'wikilink',
   useObsidianTheme: true,
   preferredRenderer: 'canvas',
   scrollback: 1000,

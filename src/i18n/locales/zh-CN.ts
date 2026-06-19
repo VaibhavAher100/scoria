@@ -257,6 +257,10 @@ export const zhCN: TranslationKeys = {
       cursorBlinkDesc: '启用光标闪烁',
       copyOnSelect: '选择时复制',
       copyOnSelectDesc: '自动将选中的文本复制到剪贴板',
+      wikilinkAutocomplete: 'Wiki 链接自动补全',
+      wikilinkAutocompleteDesc: '在终端中输入 [[ 选择库中的笔记（可选；可能影响需要原始括号的 TUI）',
+      wikilinkInsertMode: 'Wiki 链接插入格式',
+      wikilinkInsertModeDesc: '[[ 插入的内容：Wiki 链接、库相对路径或绝对路径',
       rendererSettings: '渲染器设置',
       preferredRenderer: '首选渲染器',
       preferredRendererDesc: '终端渲染引擎（WebGL 更快但可能存在兼容性问题）',
@@ -479,6 +483,12 @@ export const zhCN: TranslationKeys = {
     block: '方块',
     underline: '下划线',
     bar: '竖线',
+  },
+
+  wikilinkInsertModeOptions: {
+    wikilink: 'Wiki 链接（[[笔记]]）',
+    vaultPath: '库路径（Folder/Note.md）',
+    absolutePath: '绝对路径',
   },
 
   rendererOptions: {

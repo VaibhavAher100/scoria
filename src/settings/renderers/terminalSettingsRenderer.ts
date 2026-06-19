@@ -50,11 +50,13 @@ const NEW_INSTANCE_BEHAVIORS = [
 const CURSOR_STYLES = ['block', 'underline', 'bar'] as const;
 const BACKGROUND_IMAGE_SIZES = ['cover', 'contain', 'auto'] as const;
 const PREFERRED_RENDERERS = ['canvas', 'webgl'] as const;
+const WIKILINK_INSERT_MODES = ['wikilink', 'vault-path', 'absolute-path'] as const;
 
 type NewInstanceBehavior = (typeof NEW_INSTANCE_BEHAVIORS)[number];
 type CursorStyle = (typeof CURSOR_STYLES)[number];
 type BackgroundImageSize = (typeof BACKGROUND_IMAGE_SIZES)[number];
 type PreferredRenderer = (typeof PREFERRED_RENDERERS)[number];
+type WikilinkInsertMode = (typeof WIKILINK_INSERT_MODES)[number];
 
 const isNewInstanceBehavior = (value: string): value is NewInstanceBehavior =>
   NEW_INSTANCE_BEHAVIORS.includes(value as NewInstanceBehavior);
@@ -67,6 +69,9 @@ const isBackgroundImageSize = (value: string): value is BackgroundImageSize =>
 
 const isPreferredRenderer = (value: string): value is PreferredRenderer =>
   PREFERRED_RENDERERS.includes(value as PreferredRenderer);
+
+const isWikilinkInsertMode = (value: string): value is WikilinkInsertMode =>
+  WIKILINK_INSERT_MODES.includes(value as WikilinkInsertMode);
 
 type TerminalInstanceLike = {
   updateOptions: (options: { scrollback?: number }) => void;
@@ -555,6 +560,36 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         .onChange((value) => {
           void this.updateAppearanceSetting(() => {
             this.context.plugin.settings.copyOnSelect = value;
+          });
+        }));
+
+    // Wiki-link autocomplete
+    new Setting(container)
+      .setName(t('settingsDetails.terminal.wikilinkAutocomplete'))
+      .setDesc(t('settingsDetails.terminal.wikilinkAutocompleteDesc'))
+      .addToggle(toggle => toggle
+        .setValue(this.context.plugin.settings.wikilinkAutocomplete)
+        .onChange((value) => {
+          void this.updateAppearanceSetting(() => {
+            this.context.plugin.settings.wikilinkAutocomplete = value;
+          });
+        }));
+
+    // Wiki-link insert format
+    new Setting(container)
+      .setName(t('settingsDetails.terminal.wikilinkInsertMode'))
+      .setDesc(t('settingsDetails.terminal.wikilinkInsertModeDesc'))
+      .addDropdown(dropdown => dropdown
+        .addOption('wikilink', t('wikilinkInsertModeOptions.wikilink'))
+        .addOption('vault-path', t('wikilinkInsertModeOptions.vaultPath'))
+        .addOption('absolute-path', t('wikilinkInsertModeOptions.absolutePath'))
+        .setValue(this.context.plugin.settings.wikilinkInsertMode)
+        .onChange((value) => {
+          if (!isWikilinkInsertMode(value)) {
+            return;
+          }
+          void this.updateAppearanceSetting(() => {
+            this.context.plugin.settings.wikilinkInsertMode = value;
           });
         }));
 

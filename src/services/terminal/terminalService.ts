@@ -18,6 +18,7 @@ import {
   setCurrentPlatformShell,
 } from '@/settings/settings';
 import type { TerminalInstance } from './terminalInstance';
+import type { AutocompleteEntry } from './wikilinkAutocomplete';
 import { debugLog, debugWarn, errorLog } from '@/utils/logger';
 import { t } from '@/i18n';
 import type { ServerManager } from '@/services/server/serverManager';
@@ -232,6 +233,11 @@ export class TerminalService {
         cursorStyle: this.settings.cursorStyle,
         cursorBlink: this.settings.cursorBlink,
         copyOnSelect: this.settings.copyOnSelect,
+        wikilink: {
+          isEnabled: () => this.settings.wikilinkAutocomplete,
+          listEntries: () => this.listWikilinkEntries(),
+          resolveInsertion: (entry, query) => this.resolveWikilinkInsertion(entry, query),
+        },
         scrollback: this.settings.scrollback,
         preferredRenderer: this.settings.preferredRenderer,
         useObsidianTheme: this.settings.useObsidianTheme,
@@ -277,6 +283,73 @@ export class TerminalService {
       debugWarn('[TerminalService] 无法获取 Vault 路径:', error);
     }
     return undefined;
+  }
+
+  /** Resolve a vault-relative path to an absolute on-disk path. */
+  private getAbsolutePath(vaultRelPath: string): string {
+    const adapter = this.app.vault.adapter as { getFullPath?: (p: string) => string };
+    if (adapter && typeof adapter.getFullPath === 'function') {
+      return adapter.getFullPath(vaultRelPath);
+    }
+    return vaultRelPath;
+  }
+
+  /**
+   * Snapshot of vault notes (plus unresolved link targets) for the terminal's
+   * `[[` autocomplete, pre-sorted by modification time descending.
+   */
+  private listWikilinkEntries(): AutocompleteEntry[] {
+    const entries: AutocompleteEntry[] = [];
+    const basenames = new Set<string>();
+
+    for (const file of this.app.vault.getFiles()) {
+      entries.push({
+        name: file.basename,
+        folder: file.parent?.path ?? '',
+        path: file.path,
+        isFile: true,
+        mtime: file.stat.mtime,
+      });
+      basenames.add(file.basename.toLowerCase());
+    }
+
+    const cache = this.app.metadataCache as unknown as {
+      unresolvedLinks?: Record<string, Record<string, number>>;
+    };
+    if (cache.unresolvedLinks) {
+      const seen = new Set<string>();
+      for (const source of Object.values(cache.unresolvedLinks)) {
+        for (const target of Object.keys(source)) {
+          const key = target.toLowerCase();
+          if (basenames.has(key) || seen.has(key)) continue;
+          seen.add(key);
+          entries.push({ name: target, folder: '', path: '', isFile: false, mtime: 0 });
+        }
+      }
+    }
+
+    return entries.sort((a, b) => b.mtime - a.mtime);
+  }
+
+  /**
+   * Build the string written to the shell when a `[[` suggestion is accepted.
+   * The `[[` was already echoed, so path modes prefix two DEL chars to erase
+   * the brackets. Unresolved entries (no on-disk file) always fall back to the
+   * wikilink form.
+   */
+  private resolveWikilinkInsertion(entry: AutocompleteEntry | null, query: string): string {
+    const mode = this.settings.wikilinkInsertMode;
+    const quote = (p: string): string => (/\s/.test(p) ? `"${p.replace(/"/g, '\\"')}"` : p);
+
+    if (entry && entry.path && (mode === 'vault-path' || mode === 'absolute-path')) {
+      const ERASE_BRACKETS = '\x7f\x7f';
+      const path = mode === 'absolute-path' ? this.getAbsolutePath(entry.path) : entry.path;
+      return `${ERASE_BRACKETS}${quote(path)}`;
+    }
+
+    if (entry) return `${entry.name}]]`;
+    if (query.length > 0) return `${query}]]`;
+    return ']]';
   }
 
   /**

@@ -257,6 +257,10 @@ export const en: TranslationKeys = {
       cursorBlinkDesc: 'Enable cursor blinking',
       copyOnSelect: 'Copy on select',
       copyOnSelectDesc: 'Automatically copy selected text to the clipboard',
+      wikilinkAutocomplete: 'Wiki-link autocomplete',
+      wikilinkAutocompleteDesc: 'Type [[ in the terminal to pick a vault note (opt-in; may interfere with TUIs that need literal brackets)',
+      wikilinkInsertMode: 'Wiki-link insert format',
+      wikilinkInsertModeDesc: 'What [[ inserts: a wiki-link, a vault-relative path, or an absolute path',
       rendererSettings: 'Renderer settings',
       preferredRenderer: 'Preferred renderer',
       preferredRendererDesc: 'Terminal rendering engine (WebGL is faster but may have compatibility issues)',
@@ -479,6 +483,12 @@ export const en: TranslationKeys = {
     block: 'Block',
     underline: 'Underline',
     bar: 'Bar',
+  },
+
+  wikilinkInsertModeOptions: {
+    wikilink: 'Wiki-link ([[Note]])',
+    vaultPath: 'Vault path (Folder/Note.md)',
+    absolutePath: 'Absolute path',
   },
 
   rendererOptions: {

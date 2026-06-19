@@ -274,6 +274,10 @@ export interface TranslationKeys {
       cursorBlinkDesc: string;
       copyOnSelect: string;
       copyOnSelectDesc: string;
+      wikilinkAutocomplete: string;
+      wikilinkAutocompleteDesc: string;
+      wikilinkInsertMode: string;
+      wikilinkInsertModeDesc: string;
       rendererSettings: string;
       preferredRenderer: string;
       preferredRendererDesc: string;
@@ -511,6 +515,13 @@ export interface TranslationKeys {
     block: string;
     underline: string;
     bar: string;
+  };
+
+  // Wiki-link insertion mode options
+  wikilinkInsertModeOptions: {
+    wikilink: string;
+    vaultPath: string;
+    absolutePath: string;
   };
 
   // Renderer options
