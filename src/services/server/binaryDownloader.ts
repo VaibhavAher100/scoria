@@ -11,7 +11,7 @@
 import { debugLog, debugWarn, errorLog } from '@/utils/logger';
 import { t } from '@/i18n';
 import { resolveBinaryAssetUrls } from './binaryDownloadUrls';
-import type { BinaryDownloadConfig } from './binaryDownloadUrls';
+import type { BinaryDownloadConfig, BinaryInfo } from './binaryDownloadUrls';
 
 /** Download progress callback */
 export type DownloadProgressCallback = (progress: DownloadProgress) => void;
@@ -28,16 +28,6 @@ export interface DownloadProgress {
   totalBytes?: number;
   /** Error message */
   error?: string;
-}
-
-/** Binary info */
-interface BinaryInfo {
-  /** Filename */
-  filename: string;
-  /** Download URL */
-  url: string;
-  /** SHA256 checksum URL */
-  checksumUrl: string;
 }
 
 export class BinaryDownloader {

@@ -16,7 +16,6 @@ import {
   getCurrentPlatformCustomShellPath, 
   setCurrentPlatformCustomShellPath 
 } from '../settings';
-import { BaseSettingsRenderer } from './baseRenderer';
 import { t } from '../../i18n';
 import { PresetScriptModal } from '../../ui/terminal/presetScriptModal';
 import { renderPresetScriptIcon } from '../../ui/terminal/presetScriptIcons';
@@ -178,7 +177,8 @@ function validateShellPath(path: string): boolean {
  * Terminal settings renderer
  * Handles rendering for Shell program, instance behavior, theme, and appearance settings
  */
-export class TerminalSettingsRenderer extends BaseSettingsRenderer {
+export class TerminalSettingsRenderer {
+  protected context!: RendererContext;
   private themePreviewEl: HTMLElement | null = null;
   private themePreviewContentEl: HTMLElement | null = null;
   private themePreviewCursorEl: HTMLElement | null = null;
@@ -207,6 +207,47 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
    * so stale buttons from a previous DOM tree don't leak.
    */
   private launcherUpdateButtons: Map<string, HTMLElement> = new Map();
+
+  /**
+   * Toggle the visibility of a conditionally rendered section.
+   * Used for partial DOM updates to avoid losing the scroll position during a full refresh.
+   */
+  protected toggleConditionalSection(
+    container: HTMLElement,
+    sectionId: string,
+    shouldShow: boolean,
+    renderFn: (container: HTMLElement) => void,
+    insertAfter?: HTMLElement
+  ): void {
+    if (!container) {
+      return;
+    }
+
+    const sectionClass = `conditional-section-${sectionId}`;
+    const existingSection = container.querySelector<HTMLElement>(`.${sectionClass}`);
+
+    if (shouldShow && !existingSection) {
+      const sectionEl = container.createDiv({ cls: sectionClass });
+
+      if (insertAfter && insertAfter.nextSibling) {
+        container.insertBefore(sectionEl, insertAfter.nextSibling);
+      } else if (insertAfter && !insertAfter.nextSibling) {
+        container.appendChild(sectionEl);
+      }
+
+      try {
+        renderFn(sectionEl);
+      } catch (error) {
+        console.error(`[Settings] Error rendering conditional section "${sectionId}":`, error);
+      }
+    } else if (!shouldShow && existingSection) {
+      existingSection.remove();
+    }
+  }
+
+  protected async saveSettings(): Promise<void> {
+    await this.context.plugin.saveSettings();
+  }
 
   /**
    * Render terminal settings

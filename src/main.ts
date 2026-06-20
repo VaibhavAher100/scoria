@@ -6,6 +6,7 @@ import {
   type PresetScript,
   type PresetWorkflowAction,
   type TerminalSettings,
+  type VisibilityConfig,
 } from './settings/settings';
 import { PresetScriptModal } from './ui/terminal/presetScriptModal';
 import { renderPresetScriptIcon } from './ui/terminal/presetScriptIcons';
@@ -19,7 +20,6 @@ import { ChangelogModal } from './ui/changelog/changelogModal';
 import { i18n, t } from './i18n';
 import { debugLog, errorLog } from './utils/logger';
 import { createTermyLogoSvg, createTermyLogoSvgMarkup, TERMY_RIBBON_ICON_ID } from './ui/icons';
-import { FeatureVisibilityManager } from './services/visibility';
 import { shell } from 'electron';
 import type { TerminalInstance } from './services/terminal/terminalInstance';
 import {
@@ -90,7 +90,7 @@ type ElectronRemoteRuntime = {
  */
 export default class TerminalPlugin extends Plugin {
   settings!: TerminalSettings;
-  featureVisibilityManager!: FeatureVisibilityManager;
+  private _ribbonIcon: HTMLElement | null = null;
   
   // Lazily initialized services
   private _serverManager: ServerManager | null = null;
@@ -207,12 +207,10 @@ export default class TerminalPlugin extends Plugin {
     const { setDebugMode } = await import('./utils/logger');
     setDebugMode(this.settings.enableDebugLog);
 
-    // Initialize the feature visibility manager
-    this.featureVisibilityManager = new FeatureVisibilityManager(this);
     this.registerCustomIcons();
 
-    // Register feature visibility configuration
-    this.registerFeatureVisibility();
+    // Set up the ribbon icon and dependent UI from visibility settings
+    this.updateFeatureVisibility();
 
     // Register the terminal view
     this.registerView(
@@ -278,10 +276,9 @@ export default class TerminalPlugin extends Plugin {
       this.stopUpgradeWatchdog(presetId);
     }
 
-    // Clean up the feature visibility manager
-    if (this.featureVisibilityManager) {
-      this.featureVisibilityManager.cleanup();
-    }
+    // Remove the ribbon icon
+    this._ribbonIcon?.remove();
+    this._ribbonIcon = null;
 
     this.closePresetScriptsMenu();
 
@@ -502,29 +499,6 @@ export default class TerminalPlugin extends Plugin {
     };
   }
 
-  /**
-   * Register feature visibility configuration
-   */
-  private registerFeatureVisibility(): void {
-    this.featureVisibilityManager.registerFeature({
-      id: 'terminal',
-      getVisibility: () => this.settings.visibility,
-      ribbon: {
-        icon: TERMY_RIBBON_ICON_ID,
-        tooltip: t('ribbon.terminalTooltip'),
-        callback: () => {
-          void this.activateTerminalView();
-        },
-      },
-      onVisibilityChange: () => {
-        // Update the terminal button in new tabs when terminal visibility settings change
-        this.injectTerminalButtonToEmptyViews();
-        // Update the status bar display
-        this.updateStatusBar();
-      },
-    });
-  }
-
   private registerCustomIcons(): void {
     addIcon(TERMY_RIBBON_ICON_ID, createTermyLogoSvgMarkup());
   }
@@ -534,7 +508,25 @@ export default class TerminalPlugin extends Plugin {
    * Called after settings change
    */
   updateFeatureVisibility(): void {
-    this.featureVisibilityManager.updateAllVisibility();
+    const v = this.settings.visibility;
+    const showRibbon = v.enabled && v.showInRibbon;
+    if (showRibbon && !this._ribbonIcon) {
+      this._ribbonIcon = this.addRibbonIcon(TERMY_RIBBON_ICON_ID, t('ribbon.terminalTooltip'), () => {
+        void this.activateTerminalView();
+      });
+    } else if (!showRibbon && this._ribbonIcon) {
+      this._ribbonIcon.remove();
+      this._ribbonIcon = null;
+    }
+    // Refresh UI that depends on visibility settings
+    this.injectTerminalButtonToEmptyViews();
+    this.updateStatusBar();
+  }
+
+  /** Whether the terminal feature should appear at the given UI surface. */
+  isFeatureVisible(position: keyof VisibilityConfig): boolean {
+    const v = this.settings.visibility;
+    return v.enabled && v[position] === true;
   }
 
   /**
@@ -1004,7 +996,7 @@ export default class TerminalPlugin extends Plugin {
       name: t('commands.openTerminal'),
       checkCallback: (checking: boolean) => {
         // Check visibility settings
-        if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
+        if (!this.isFeatureVisible('showInCommandPalette')) {
           return false;
         }
         if (!checking) {
@@ -1018,7 +1010,7 @@ export default class TerminalPlugin extends Plugin {
       id: 'open-terminal-current-folder',
       name: t('commands.openTerminalCurrentFolder'),
       checkCallback: (checking: boolean) => {
-        if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
+        if (!this.isFeatureVisible('showInCommandPalette')) {
           return false;
         }
         const file = this.app.workspace.getActiveFile();
@@ -1035,7 +1027,7 @@ export default class TerminalPlugin extends Plugin {
     // Right-click a file or folder in the explorer -> open a terminal there.
     this.registerEvent(
       this.app.workspace.on('file-menu', (menu: Menu, file: TAbstractFile) => {
-        if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
+        if (!this.isFeatureVisible('showInCommandPalette')) {
           return;
         }
         menu.addItem((item) => {
@@ -1079,7 +1071,7 @@ export default class TerminalPlugin extends Plugin {
       id: 'terminal-toggle-always-on-top',
       name: t('commands.terminalToggleAlwaysOnTop'),
       checkCallback: (checking: boolean) => {
-        if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
+        if (!this.isFeatureVisible('showInCommandPalette')) {
           return false;
         }
 
@@ -1100,7 +1092,7 @@ export default class TerminalPlugin extends Plugin {
       id: 'terminal-clear',
       name: t('commands.terminalClear'),
       checkCallback: (checking: boolean) => {
-        if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
+        if (!this.isFeatureVisible('showInCommandPalette')) {
           return false;
         }
         const terminalView = this.getActiveTerminalView();
@@ -1120,7 +1112,7 @@ export default class TerminalPlugin extends Plugin {
       id: 'terminal-copy',
       name: t('commands.terminalCopy'),
       checkCallback: (checking: boolean) => {
-        if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
+        if (!this.isFeatureVisible('showInCommandPalette')) {
           return false;
         }
         const terminalView = this.getActiveTerminalView();
@@ -1143,7 +1135,7 @@ export default class TerminalPlugin extends Plugin {
       id: 'terminal-paste',
       name: t('commands.terminalPaste'),
       checkCallback: (checking: boolean) => {
-        if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
+        if (!this.isFeatureVisible('showInCommandPalette')) {
           return false;
         }
         const terminalView = this.getActiveTerminalView();
@@ -1165,7 +1157,7 @@ export default class TerminalPlugin extends Plugin {
       id: 'terminal-font-increase',
       name: t('commands.terminalFontIncrease'),
       checkCallback: (checking: boolean) => {
-        if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
+        if (!this.isFeatureVisible('showInCommandPalette')) {
           return false;
         }
         const terminalView = this.getActiveTerminalView();
@@ -1185,7 +1177,7 @@ export default class TerminalPlugin extends Plugin {
       id: 'terminal-font-decrease',
       name: t('commands.terminalFontDecrease'),
       checkCallback: (checking: boolean) => {
-        if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
+        if (!this.isFeatureVisible('showInCommandPalette')) {
           return false;
         }
         const terminalView = this.getActiveTerminalView();
@@ -1205,7 +1197,7 @@ export default class TerminalPlugin extends Plugin {
       id: 'terminal-font-reset',
       name: t('commands.terminalFontReset'),
       checkCallback: (checking: boolean) => {
-        if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
+        if (!this.isFeatureVisible('showInCommandPalette')) {
           return false;
         }
         const terminalView = this.getActiveTerminalView();
@@ -1225,7 +1217,7 @@ export default class TerminalPlugin extends Plugin {
       id: 'terminal-split-horizontal',
       name: t('commands.terminalSplitHorizontal'),
       checkCallback: (checking: boolean) => {
-        if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
+        if (!this.isFeatureVisible('showInCommandPalette')) {
           return false;
         }
         const terminalView = this.getActiveTerminalView();
@@ -1244,7 +1236,7 @@ export default class TerminalPlugin extends Plugin {
       id: 'terminal-split-vertical',
       name: t('commands.terminalSplitVertical'),
       checkCallback: (checking: boolean) => {
-        if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
+        if (!this.isFeatureVisible('showInCommandPalette')) {
           return false;
         }
         const terminalView = this.getActiveTerminalView();
@@ -1263,7 +1255,7 @@ export default class TerminalPlugin extends Plugin {
       id: 'terminal-clear-buffer',
       name: t('commands.terminalClearBuffer'),
       checkCallback: (checking: boolean) => {
-        if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
+        if (!this.isFeatureVisible('showInCommandPalette')) {
           return false;
         }
         const terminalView = this.getActiveTerminalView();
@@ -1282,7 +1274,7 @@ export default class TerminalPlugin extends Plugin {
       id: 'terminal-send-selection',
       name: t('commands.terminalSendSelection'),
       checkCallback: (checking: boolean) => {
-        if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
+        if (!this.isFeatureVisible('showInCommandPalette')) {
           return false;
         }
 
@@ -1298,7 +1290,7 @@ export default class TerminalPlugin extends Plugin {
       id: 'terminal-send-current-note',
       name: t('commands.terminalSendCurrentNote'),
       checkCallback: (checking: boolean) => {
-        if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
+        if (!this.isFeatureVisible('showInCommandPalette')) {
           return false;
         }
 
@@ -1314,7 +1306,7 @@ export default class TerminalPlugin extends Plugin {
       id: 'terminal-send-current-path',
       name: t('commands.terminalSendCurrentPath'),
       checkCallback: (checking: boolean) => {
-        if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
+        if (!this.isFeatureVisible('showInCommandPalette')) {
           return false;
         }
 
@@ -1330,7 +1322,7 @@ export default class TerminalPlugin extends Plugin {
       id: 'terminal-prompt-previous',
       name: t('commands.terminalPromptPrevious'),
       checkCallback: (checking: boolean) => {
-        if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
+        if (!this.isFeatureVisible('showInCommandPalette')) {
           return false;
         }
 
@@ -1346,7 +1338,7 @@ export default class TerminalPlugin extends Plugin {
       id: 'terminal-prompt-next',
       name: t('commands.terminalPromptNext'),
       checkCallback: (checking: boolean) => {
-        if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
+        if (!this.isFeatureVisible('showInCommandPalette')) {
           return false;
         }
 
@@ -1362,7 +1354,7 @@ export default class TerminalPlugin extends Plugin {
       id: 'terminal-prompt-last-failed',
       name: t('commands.terminalPromptLastFailed'),
       checkCallback: (checking: boolean) => {
-        if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
+        if (!this.isFeatureVisible('showInCommandPalette')) {
           return false;
         }
 
@@ -1390,7 +1382,7 @@ export default class TerminalPlugin extends Plugin {
         id: commandId,
         name: `${t('commands.presetScriptPrefix')}${script.name || t('settingsDetails.terminal.presetScriptsUnnamed')}`,
         checkCallback: (checking: boolean) => {
-          if (!this.featureVisibilityManager.isVisibleAt('terminal', 'showInCommandPalette')) {
+          if (!this.isFeatureVisible('showInCommandPalette')) {
             return false;
           }
           const currentScript = this.getPresetScriptById(script.id);

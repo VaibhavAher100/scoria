@@ -3,7 +3,19 @@
  * Includes all terminal-related configuration options
  */
 
-import type { VisibilityConfig } from '@/services/visibility';
+/** Feature visibility settings (per UI surface) */
+export interface VisibilityConfig {
+  /** Whether the feature is enabled (master switch) */
+  enabled: boolean;
+  /** Whether to show in the command palette */
+  showInCommandPalette: boolean;
+  /** Whether to show an icon in the ribbon */
+  showInRibbon: boolean;
+  /** Whether to show in new tabs */
+  showInNewTab: boolean;
+  /** Whether to show in the status bar */
+  showInStatusBar: boolean;
+}
 
 /** Terminal programs that can be launched from the shell selector when installed */
 export type TerminalShellType = 'tmux';
