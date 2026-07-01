@@ -1,6 +1,6 @@
 <div align="center">
 
-# Termy
+# Scoria
 
 <img src="assets\termy-tg-avatar-transparent.svg" width="150" alt="Termy logo" />
 
