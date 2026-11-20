@@ -34,11 +34,11 @@ import type { Transport, TransportMessage, SocketConnector } from './transport.t
 import { WebSocketTransport, PipeTransport } from './transport.ts';
 import type { DaemonRecord } from './daemonRecord.ts';
 import {
-  PIPE_NAME_RE,
-  SOCKET_PATH_RE,
   serializeDaemonRecord,
   parseDaemonRecord,
   isVersionCompatible,
+  isAcceptableEndpoint,
+  type ExpectedEndpoint,
 } from './daemonRecord.ts';
 
 type BinaryUpdateResult = 'skipped-offline' | 'already-ready' | 'downloaded' | 'updated';
@@ -426,6 +426,8 @@ export class ServerManager {
    * Start the server
    */
   private async startServer(): Promise<void> {
+    // The daemon spawned by this call, if any; it is killed on a failed start.
+    let spawnedChild: ChildProcess | null = null;
     try {
       debugLog('[ServerManager] 启动统一服务器...');
 
@@ -480,6 +482,7 @@ export class ServerManager {
         // alive across a reload); detaching now is the lifecycle prerequisite.
         detached: true,
       });
+      spawnedChild = this.process;
       this.process.unref();
 
       debugLog('[ServerManager] 服务器进程已启动, PID:', this.process.pid);
@@ -533,7 +536,18 @@ export class ServerManager {
 
     } catch (error) {
       this.serverStartPromise = null;
-      
+
+      // A daemon whose handshake was refused (downgrade, timeout) must not
+      // keep running in the background. Only the daemon spawned by this call
+      // is killed, and only while no endpoint was accepted from it.
+      if (spawnedChild && !this.pipePath && !this.socketPath && !this.port) {
+        try {
+          spawnedChild.kill();
+        } catch {
+          // The process already exited.
+        }
+      }
+
       const errorMessage = error instanceof Error ? error.message : String(error);
       errorLog('[ServerManager] 启动服务器失败:', errorMessage);
       
@@ -723,11 +737,24 @@ export class ServerManager {
           } catch {
             continue; // not the info line, keep scanning
           }
+          if (typeof info !== 'object' || info === null) {
+            continue; // valid JSON but not an object (e.g. `null`)
+          }
 
-          const hasPipe = typeof info.pipe === 'string' && PIPE_NAME_RE.test(info.pipe);
-          const hasPort = typeof info.port === 'number' && info.port > 0;
-          const hasSocket = typeof info.socket === 'string' && SOCKET_PATH_RE.test(info.socket);
-          if (hasPipe || hasPort || hasSocket) {
+          // Accept only the transport this plugin requested. A pipe/socket
+          // request answered with a port (or a port with no token) is a
+          // downgrade and is ignored, so the start times out and fails closed.
+          const expected: ExpectedEndpoint = this.usePipe()
+            ? 'pipe'
+            : this.useSocket()
+              ? 'socket'
+              : 'websocket';
+          if (isAcceptableEndpoint(info, expected)) {
+            info = expected === 'pipe'
+              ? { pipe: info.pipe, pid: info.pid }
+              : expected === 'socket'
+                ? { socket: info.socket, pid: info.pid }
+                : { port: info.port, token: info.token, pid: info.pid };
             window.clearTimeout(timeout);
             this.process?.stdout?.off('data', onData);
             // Redact the capability token: never print a live secret, even in
@@ -773,9 +800,14 @@ export class ServerManager {
       return new PipeTransport(ipcPath, connector);
     }
     if (this.port) {
+      // Never open an unauthenticated WebSocket to the daemon.
+      if (!this.authToken) {
+        errorLog('[ServerManager] Refusing WebSocket transport without a capability token');
+        return null;
+      }
       const wsUrl = `ws://127.0.0.1:${this.port}`;
       debugLog('[ServerManager] 连接传输 (WebSocket):', wsUrl);
-      return new WebSocketTransport(wsUrl, this.authToken ?? undefined);
+      return new WebSocketTransport(wsUrl, this.authToken);
     }
     return null;
   }

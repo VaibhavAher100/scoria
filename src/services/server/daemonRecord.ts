@@ -104,6 +104,41 @@ export function parseDaemonRecord(raw: string): DaemonRecord | null {
   };
 }
 
+/** The transport the plugin requested when it spawned the daemon. */
+export type ExpectedEndpoint = 'pipe' | 'socket' | 'websocket';
+
+/** The subset of the daemon's stdout info line that selects a transport. */
+export interface AnnouncedEndpoint {
+  pipe?: unknown;
+  socket?: unknown;
+  port?: unknown;
+  token?: unknown;
+}
+
+/**
+ * Whether the daemon's announced endpoint is the one the plugin asked for.
+ * The plugin accepts only the requested transport. A daemon that was asked
+ * for a pipe or a socket and answers with a port is refused, so a foreign or
+ * outdated binary cannot downgrade the client to a WebSocket. A WebSocket
+ * endpoint must also carry a non-empty capability token.
+ */
+export function isAcceptableEndpoint(info: AnnouncedEndpoint, expected: ExpectedEndpoint): boolean {
+  if (expected === 'pipe') {
+    return typeof info.pipe === 'string' && PIPE_NAME_RE.test(info.pipe);
+  }
+  if (expected === 'socket') {
+    return typeof info.socket === 'string' && SOCKET_PATH_RE.test(info.socket);
+  }
+  return (
+    typeof info.port === 'number' &&
+    Number.isInteger(info.port) &&
+    info.port > 0 &&
+    info.port <= 65535 &&
+    typeof info.token === 'string' &&
+    info.token.length > 0
+  );
+}
+
 /**
  * Whether a persisted daemon may be reused by a plugin running `currentVersion`.
  * A mismatch means the daemon speaks an older protocol and must be replaced

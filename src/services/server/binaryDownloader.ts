@@ -233,57 +233,47 @@ export class BinaryDownloader {
         // If the download fails, provide detailed error information
         const errorMsg = downloadError instanceof Error ? downloadError.message : String(downloadError);
         debugWarn('[BinaryDownloader] 下载失败:', errorMsg);
-        
-        if (errorMsg.includes('404') && this.downloadConfig.source === 'github-release') {
-          debugLog('[BinaryDownloader] 指定版本不存在，尝试下载 GitHub latest...');
-          const latestBinaryInfo = this.getBinaryInfo('latest');
-
-          await this.downloadFile(latestBinaryInfo.url, tempPath, (percent, downloadedBytes, totalBytes) => {
-            notify({
-              stage: 'downloading',
-              percent: 10 + percent * 0.7,
-              downloadedBytes,
-              totalBytes,
-            });
-          });
-
-          binaryInfo.checksumUrl = latestBinaryInfo.checksumUrl;
-        } else {
-          throw downloadError;
-        }
+        // Never fall back to a different (e.g. `latest`) version: the
+        // installed binary must be exactly the version this plugin expects.
+        throw downloadError;
       }
 
       notify({ stage: 'verifying', percent: 85 });
-      
-      // Download and verify the checksum
-      if (binaryInfo.checksumUrl) {
-        try {
-          debugLog('[BinaryDownloader] 拉取校验和:', binaryInfo.checksumUrl);
-          const checksumContent = await this.fetchText(binaryInfo.checksumUrl);
-          const expectedHash = checksumContent.split(/\s+/)[0].toLowerCase();
-          
-          const actualHash = await this.calculateSHA256(tempPath);
-          debugLog('[BinaryDownloader] 校验和对比:', {
-            expectedHash,
-            actualHash,
-            file: tempPath,
-          });
-          
-          if (actualHash !== expectedHash) {
-            // Delete the corrupted file
-            this.safeUnlink(tempPath);
-            throw new Error(
-              t('notices.checksumMismatch') || 
-              `校验和不匹配: 期望 ${expectedHash}, 实际 ${actualHash}`
-            );
-          }
-          
-          debugLog('[BinaryDownloader] SHA256 校验通过');
-        } catch (checksumError) {
-          // If checksum download fails, warn only and do not block usage
-          debugWarn('[BinaryDownloader] 校验和验证失败:', checksumError);
-        }
+
+      // Verify the checksum. Fail closed: a missing checksum URL, a failed
+      // checksum fetch, a malformed checksum, or a mismatch all abort the
+      // install, and the downloaded file is deleted before it can run.
+      if (!binaryInfo.checksumUrl) {
+        this.safeUnlink(tempPath);
+        throw new Error('Binary checksum URL is missing; refusing to install an unverified binary');
       }
+      debugLog('[BinaryDownloader] 拉取校验和:', binaryInfo.checksumUrl);
+      let expectedHash: string;
+      try {
+        const checksumContent = await this.fetchText(binaryInfo.checksumUrl);
+        expectedHash = (checksumContent.trim().split(/\s+/)[0] ?? '').toLowerCase();
+      } catch (checksumError) {
+        this.safeUnlink(tempPath);
+        throw new Error(`Binary checksum could not be fetched; refusing to install: ${String(checksumError)}`);
+      }
+      if (!/^[0-9a-f]{64}$/.test(expectedHash)) {
+        this.safeUnlink(tempPath);
+        throw new Error('Binary checksum is malformed; refusing to install');
+      }
+      const actualHash = await this.calculateSHA256(tempPath);
+      debugLog('[BinaryDownloader] 校验和对比:', {
+        expectedHash,
+        actualHash,
+        file: tempPath,
+      });
+      if (actualHash !== expectedHash) {
+        this.safeUnlink(tempPath);
+        throw new Error(
+          t('notices.checksumMismatch') ||
+          `校验和不匹配: 期望 ${expectedHash}, 实际 ${actualHash}`
+        );
+      }
+      debugLog('[BinaryDownloader] SHA256 校验通过');
 
       // Set executable permission (Unix)
       if (process.platform !== 'win32') {
@@ -374,6 +364,10 @@ export class BinaryDownloader {
               return;
             }
             const nextUrl = new URL(redirectLocation, urlObj).toString();
+            if (new URL(nextUrl).protocol !== 'https:') {
+              reject(new Error('Download refused: redirect to a non-https URL'));
+              return;
+            }
             debugLog('[BinaryDownloader] 跟随重定向:', {
               from: urlObj.toString(),
               to: nextUrl,
@@ -564,6 +558,10 @@ export class BinaryDownloader {
           if (statusCode >= 300 && statusCode < 400 && redirectLocation) {
             response.resume();
             const nextUrl = new URL(redirectLocation, urlObj).toString();
+            if (new URL(nextUrl).protocol !== 'https:') {
+              reject(new Error('Download refused: redirect to a non-https URL'));
+              return;
+            }
             debugLog('[BinaryDownloader] 文本请求重定向:', {
               from: urlObj.toString(),
               to: nextUrl,
