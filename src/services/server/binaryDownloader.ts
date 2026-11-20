@@ -3,8 +3,8 @@
  * 
  * Responsibilities:
  * 1. Detect the current platform
- * 2. Download the matching binary from GitHub Releases or Cloudflare R2
- * 3. Verify SHA256
+ * 2. Download the matching binary from our GitHub release
+ * 3. Verify its SHA256 against the hash pinned in this plugin bundle
  * 4. Track download progress
  */
 
@@ -55,7 +55,6 @@ export class BinaryDownloader {
   private readonly fs: typeof import('fs');
   private readonly path: typeof import('path');
   private readonly crypto: typeof import('crypto');
-  private readonly http: typeof import('http');
   private readonly https: typeof import('https');
 
   constructor(pluginDir: string, version: string, downloadConfig: BinaryDownloadConfig) {
@@ -67,7 +66,6 @@ export class BinaryDownloader {
     this.fs = window.require('fs') as typeof import('fs');
     this.path = window.require('path') as typeof import('path');
     this.crypto = window.require('crypto') as typeof import('crypto');
-    this.http = window.require('http') as typeof import('http');
     this.https = window.require('https') as typeof import('https');
   }
 
@@ -92,7 +90,18 @@ export class BinaryDownloader {
     
     // Check whether the version matches
     const installedVersion = this.getInstalledVersion();
-    return installedVersion === this.version;
+    return installedVersion === this.version && this.matchesPin(binaryPath);
+  }
+
+  /** True if this bundle pins no hash (dev build, unsupported platform) or the file on disk matches the pin. */
+  private matchesPin(binaryPath: string): boolean {
+    const pin = this.getBinaryInfo().expectedHash;
+    if (!pin) return true;
+    try {
+      return this.crypto.createHash('sha256').update(this.fs.readFileSync(binaryPath)).digest('hex') === pin;
+    } catch {
+      return false; // unreadable: treat as a mismatch, so the binary is downloaded again
+    }
   }
   
   /**
@@ -111,7 +120,8 @@ export class BinaryDownloader {
     }
     
     const installedVersion = this.getInstalledVersion();
-    return installedVersion !== this.version;
+    // A binary that does not match the pin (an old or upstream build) is replaced.
+    return installedVersion !== this.version || !this.matchesPin(binaryPath);
   }
   
   /**
@@ -188,7 +198,7 @@ export class BinaryDownloader {
   /**
    * Download the binary
    */
-  async download(onProgress?: DownloadProgressCallback): Promise<void> {
+  async download(onProgress?: DownloadProgressCallback, beforeReplace?: () => Promise<void>): Promise<void> {
     const notify = (progress: DownloadProgress) => {
       onProgress?.(progress);
     };
@@ -207,6 +217,16 @@ export class BinaryDownloader {
       
       // Get binary info
       const binaryInfo = this.getBinaryInfo();
+
+      // Fail closed before any network access: the binary is trusted only through
+      // the hash pinned in this bundle, never through a file from the same host.
+      const expectedHash = binaryInfo.expectedHash;
+      if (!expectedHash || !/^[0-9a-f]{64}$/.test(expectedHash)) {
+        throw new Error(
+          `No pinned SHA-256 for ${binaryInfo.filename} in this build ` +
+          '(unsupported platform or development build); refusing to download.'
+        );
+      }
 
       // Ensure the directory exists
       const binariesDir = this.path.join(this.pluginDir, 'binaries');
@@ -240,26 +260,6 @@ export class BinaryDownloader {
 
       notify({ stage: 'verifying', percent: 85 });
 
-      // Verify the checksum. Fail closed: a missing checksum URL, a failed
-      // checksum fetch, a malformed checksum, or a mismatch all abort the
-      // install, and the downloaded file is deleted before it can run.
-      if (!binaryInfo.checksumUrl) {
-        this.safeUnlink(tempPath);
-        throw new Error('Binary checksum URL is missing; refusing to install an unverified binary');
-      }
-      debugLog('[BinaryDownloader] 拉取校验和:', binaryInfo.checksumUrl);
-      let expectedHash: string;
-      try {
-        const checksumContent = await this.fetchText(binaryInfo.checksumUrl);
-        expectedHash = (checksumContent.trim().split(/\s+/)[0] ?? '').toLowerCase();
-      } catch (checksumError) {
-        this.safeUnlink(tempPath);
-        throw new Error(`Binary checksum could not be fetched; refusing to install: ${String(checksumError)}`);
-      }
-      if (!/^[0-9a-f]{64}$/.test(expectedHash)) {
-        this.safeUnlink(tempPath);
-        throw new Error('Binary checksum is malformed; refusing to install');
-      }
       const actualHash = await this.calculateSHA256(tempPath);
       debugLog('[BinaryDownloader] 校验和对比:', {
         expectedHash,
@@ -280,6 +280,7 @@ export class BinaryDownloader {
         this.fs.chmodSync(tempPath, 0o755);
       }
 
+      await beforeReplace?.();
       await this.replaceBinary(tempPath, binaryPath);
       this.writeCachedVersion(binaryPath, this.version);
       this.installedVersionCache = this.version;
@@ -307,17 +308,16 @@ export class BinaryDownloader {
    * Get binary info
    * Build the download URL for the current version
    */
-  private getBinaryInfo(releaseChannel: 'version' | 'latest' = 'version'): BinaryInfo {
+  private getBinaryInfo(): BinaryInfo {
     const binaryInfo = resolveBinaryAssetUrls({
       version: this.version,
       source: this.downloadConfig.source,
-      releaseChannel,
     });
 
     debugLog(
       '[BinaryDownloader] 使用二进制下载 URL:',
       binaryInfo.url,
-      `(source: ${this.downloadConfig.source}, channel: ${releaseChannel})`
+      `(source: ${this.downloadConfig.source})`
     );
 
     return binaryInfo;
@@ -344,9 +344,12 @@ export class BinaryDownloader {
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       const urlObj = new URL(url);
-      const client = urlObj.protocol === 'https:' ? this.https : this.http;
+      if (urlObj.protocol !== 'https:') {
+        reject(new Error('Download refused: non-https URL'));
+        return;
+      }
 
-      const request = client.get(
+      const request = this.https.get(
         urlObj,
         {
           headers: {
@@ -533,69 +536,6 @@ export class BinaryDownloader {
     } catch (error) {
       debugWarn('[BinaryDownloader] 清理临时文件失败:', error);
     }
-  }
-
-  /**
-   * Get text content
-   */
-  private async fetchText(url: string): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const urlObj = new URL(url);
-      const client = urlObj.protocol === 'https:' ? this.https : this.http;
-
-      const request = client.get(
-        urlObj,
-        {
-          headers: {
-            'User-Agent': 'obsidian-smart-workflow',
-          },
-        },
-        (response) => {
-          const statusCode = response.statusCode ?? 0;
-          const redirectLocation = response.headers.location;
-
-          // Handle redirects
-          if (statusCode >= 300 && statusCode < 400 && redirectLocation) {
-            response.resume();
-            const nextUrl = new URL(redirectLocation, urlObj).toString();
-            if (new URL(nextUrl).protocol !== 'https:') {
-              reject(new Error('Download refused: redirect to a non-https URL'));
-              return;
-            }
-            debugLog('[BinaryDownloader] 文本请求重定向:', {
-              from: urlObj.toString(),
-              to: nextUrl,
-              statusCode,
-            });
-            resolve(this.fetchText(nextUrl));
-            return;
-          }
-
-          if (statusCode !== 200) {
-            response.resume();
-            reject(new Error(`获取文本失败: HTTP ${statusCode}`));
-            return;
-          }
-
-          let data = '';
-          response.on('data', (chunk: Buffer | string) => {
-            data += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
-          });
-
-          response.on('end', () => {
-            debugLog('[BinaryDownloader] 文本请求完成:', {
-              url: urlObj.toString(),
-              length: data.length,
-            });
-            resolve(data);
-          });
-
-          response.on('error', reject);
-        }
-      );
-
-      request.on('error', reject);
-    });
   }
 
   /**

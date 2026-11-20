@@ -9,6 +9,7 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "isolatedModules": true,
+    "resolveJsonModule": true,
     "strictNullChecks": true,
     "skipLibCheck": true,
     "types": [

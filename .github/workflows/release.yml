@@ -120,6 +120,20 @@ jobs:
           chmod +x binaries/termy-server-darwin-* || true
           chmod +x binaries/termy-server-linux-* || true
 
+      # S2: the plugin bundle carries each binary's SHA-256, so the downloader
+      # never trusts a checksum file from the same host as the binary.
+      - name: Pin binary hashes into the plugin bundle
+        run: |
+          node -e '
+            const fs = require("fs"), crypto = require("crypto");
+            const names = ["win32-x64.exe", "darwin-arm64", "darwin-x64", "linux-x64", "linux-arm64"].map((s) => "termy-server-" + s);
+            const pins = {};
+            // Hash the binaries themselves; readFileSync throws if one is missing.
+            for (const f of names) pins[f] = crypto.createHash("sha256").update(fs.readFileSync("binaries/" + f)).digest("hex");
+            fs.writeFileSync("src/services/server/pinnedHashes.json", JSON.stringify(pins, null, 2) + "\n");
+          '
+          cat src/services/server/pinnedHashes.json
+
       - name: Install and build
         run: |
           pnpm install --frozen-lockfile
@@ -138,6 +152,7 @@ jobs:
           subject-path: |
             main.js
             styles.css
+            binaries/termy-server-*
 
       - name: Prepare release assets
         run: |
@@ -155,16 +170,6 @@ jobs:
           chmod +x termy/binaries/termy-server-darwin-* || true
           chmod +x termy/binaries/termy-server-linux-* || true
           zip -r "termy-${{ github.ref_name }}.zip" termy
-
-      - name: Upload binaries to R2
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          node scripts/upload-r2-assets.js \
-            --bucket termy-binaries-apac \
-            --version "${{ github.ref_name }}" \
-            --config wrangler.jsonc
 
       - name: Release
         uses: softprops/action-gh-release@v3

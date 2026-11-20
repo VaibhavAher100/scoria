@@ -621,6 +621,11 @@ export class ServerManager {
       debugLog('[ServerManager] 服务器运行中，更新前先停止服务器');
       await this.shutdown();
     }
+    // A daemon kept alive by a prior plugin instance still runs the old binary. Stop
+    // it only once the new binary is verified, or Windows cannot replace the file.
+    const stopOldDaemon = needsUpdate && !shouldRestart && (this.usePipe() || this.useSocket())
+      ? async () => { await this.tryReuseDaemon(false); }
+      : undefined;
 
     const messageKey = needsUpdate ? 'notices.updatingBinary' : 'notices.downloadingBinary';
     const defaultMessage = needsUpdate ? '正在更新服务器组件...' : '正在下载服务器组件...';
@@ -643,7 +648,7 @@ export class ServerManager {
         } else if (progress.stage === 'verifying') {
           notice.setMessage(t('notices.verifyingBinary') || '正在验证文件...');
         }
-      });
+      }, stopOldDaemon);
 
       notice.hide();
       const completeKey = needsUpdate ? 'notices.binaryUpdateComplete' : 'notices.binaryDownloadComplete';
@@ -877,7 +882,7 @@ export class ServerManager {
    * (Windows) or the 0600/0700 socket perms (Unix). A same-user process squatting
    * a `termy-<uuid>` name is inside the trusted (same-user) threat model.
    */
-  private async tryReuseDaemon(): Promise<boolean> {
+  private async tryReuseDaemon(allowReuse = true): Promise<boolean> {
     const record = this.readDaemonRecord();
     if (!record) {
       return false;
@@ -909,7 +914,7 @@ export class ServerManager {
     // The endpoint is live. If the daemon speaks an older protocol, replace it:
     // tear down the probe connection, kill the (now confirmed-live, ours-by-perms)
     // daemon, and fall through to a fresh spawn. Never reattach across versions.
-    if (!isVersionCompatible(record, this.version)) {
+    if (!allowReuse || !isVersionCompatible(record, this.version)) {
       debugLog(
         `[ServerManager] 守护进程记录版本不匹配 (${record.binaryVersion} != ${this.version})，` +
         `终止并重新启动`
