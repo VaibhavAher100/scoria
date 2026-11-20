@@ -37,7 +37,7 @@ const READ_BUFFER_SIZE: usize = 8192;
 /// already restricts who may open the pipe, but a random name avoids any
 /// fixed target a co-resident process could race to pre-create.
 pub fn new_pipe_name() -> String {
-    format!(r"\\.\pipe\termy-{}", Uuid::new_v4())
+    format!(r"\\.\pipe\scoria-{}", Uuid::new_v4())
 }
 
 /// The connected pipe's write half, adapted to the transport-agnostic sink.
@@ -418,6 +418,15 @@ mod tests {
     use super::*;
     use tokio::net::windows::named_pipe::ClientOptions;
     use tokio::time::{sleep, Duration};
+
+    /// The plugin (daemonRecord.ts PIPE_NAME_RE) accepts only this shape.
+    #[test]
+    fn pipe_name_has_scoria_prefix_and_uuid() {
+        let name = new_pipe_name();
+        let id = name.strip_prefix(r"\\.\pipe\scoria-").expect("prefix");
+        assert_eq!(id.len(), 36, "{name}");
+        assert!(Uuid::parse_str(id).is_ok(), "{name}");
+    }
 
     #[test]
     fn security_attributes_build() {

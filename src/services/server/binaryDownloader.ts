@@ -44,7 +44,7 @@ export class BinaryDownloader {
   private installedVersionCache: string | null | undefined = undefined;
   
   /** Version cache filename */
-  private readonly versionCacheFileName = '.termy-server.version.json';
+  private readonly versionCacheFileName = '.scoria-server.version.json';
 
   /**
    * Node built-ins are resolved on demand inside the constructor via
@@ -128,7 +128,7 @@ export class BinaryDownloader {
    * Get the installed binary version.
    *
    * Termy reads the version from a JSON cache file written next to the
-   * native binary at install time (`<plugin>/binaries/.termy-server.version.json`).
+   * native binary at install time (`<plugin>/binaries/.scoria-server.version.json`).
    * The cache stores the binary's size + mtime alongside the version
    * string, so an out-of-band binary swap invalidates the cache and we
    * fall back to triggering a fresh download. We deliberately do NOT
@@ -190,7 +190,7 @@ export class BinaryDownloader {
     const platform = process.platform;
     const arch = process.arch;
     const ext = platform === 'win32' ? '.exe' : '';
-    const filename = `termy-server-${platform}-${arch}${ext}`;
+    const filename = `scoria-server-${platform}-${arch}${ext}`;
     
     return this.path.join(this.pluginDir, 'binaries', filename);
   }
@@ -510,7 +510,7 @@ export class BinaryDownloader {
         if (this.isFileBusyError(error)) {
           throw new Error(
             t('notices.binaryInUse') ||
-            '二进制文件被占用，请关闭 Obsidian 或结束 termy-server 进程后重试'
+            '二进制文件被占用，请关闭 Obsidian 或结束 scoria-server 进程后重试'
           );
         }
         throw error;

@@ -1,5 +1,5 @@
 {
-  "name": "termy",
+  "name": "scoria",
   "version": "1.4.1",
   "type": "module",
   "description": "Terminal emulator with split panes, reusable workflows, AI CLI context handoff, and zero setup. Powered by xterm.js and a bundled Rust PTY backend.",

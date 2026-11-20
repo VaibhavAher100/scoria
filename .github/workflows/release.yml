@@ -69,8 +69,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p binaries
-          BINARY_NAME="termy-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}"
-          cp "rust-servers/target/${{ matrix.target }}/release/termy-server${{ matrix.ext }}" "binaries/${BINARY_NAME}"
+          BINARY_NAME="scoria-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}"
+          cp "rust-servers/target/${{ matrix.target }}/release/scoria-server${{ matrix.ext }}" "binaries/${BINARY_NAME}"
           
           cd binaries
           if command -v sha256sum &> /dev/null; then
@@ -84,8 +84,8 @@ jobs:
         with:
           name: server-${{ matrix.platform }}-${{ matrix.arch }}
           path: |
-            binaries/termy-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}
-            binaries/termy-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}.sha256
+            binaries/scoria-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}
+            binaries/scoria-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}.sha256
 
   release:
     name: Release
@@ -117,8 +117,8 @@ jobs:
 
       - name: Set permissions
         run: |
-          chmod +x binaries/termy-server-darwin-* || true
-          chmod +x binaries/termy-server-linux-* || true
+          chmod +x binaries/scoria-server-darwin-* || true
+          chmod +x binaries/scoria-server-linux-* || true
 
       # S2: the plugin bundle carries each binary's SHA-256, so the downloader
       # never trusts a checksum file from the same host as the binary.
@@ -126,7 +126,7 @@ jobs:
         run: |
           node -e '
             const fs = require("fs"), crypto = require("crypto");
-            const names = ["win32-x64.exe", "darwin-arm64", "darwin-x64", "linux-x64", "linux-arm64"].map((s) => "termy-server-" + s);
+            const names = ["win32-x64.exe", "darwin-arm64", "darwin-x64", "linux-x64", "linux-arm64"].map((s) => "scoria-server-" + s);
             const pins = {};
             // Hash the binaries themselves; readFileSync throws if one is missing.
             for (const f of names) pins[f] = crypto.createHash("sha256").update(fs.readFileSync("binaries/" + f)).digest("hex");
@@ -152,7 +152,7 @@ jobs:
           subject-path: |
             main.js
             styles.css
-            binaries/termy-server-*
+            binaries/scoria-server-*
 
       - name: Prepare release assets
         run: |
@@ -160,16 +160,16 @@ jobs:
           # main.js, manifest.json, styles.css 已在根目录
           
           # 设置二进制文件执行权限
-          chmod +x binaries/termy-server-darwin-* || true
-          chmod +x binaries/termy-server-linux-* || true
+          chmod +x binaries/scoria-server-darwin-* || true
+          chmod +x binaries/scoria-server-linux-* || true
           
           # 创建完整包（所有平台，供手动安装）
-          mkdir -p termy/binaries
-          cp main.js manifest.json styles.css termy/
-          cp binaries/termy-server-* termy/binaries/
-          chmod +x termy/binaries/termy-server-darwin-* || true
-          chmod +x termy/binaries/termy-server-linux-* || true
-          zip -r "termy-${{ github.ref_name }}.zip" termy
+          mkdir -p scoria/binaries
+          cp main.js manifest.json styles.css scoria/
+          cp binaries/scoria-server-* scoria/binaries/
+          chmod +x scoria/binaries/scoria-server-darwin-* || true
+          chmod +x scoria/binaries/scoria-server-linux-* || true
+          zip -r "scoria-${{ github.ref_name }}.zip" scoria
 
       - name: Release
         uses: softprops/action-gh-release@v3
@@ -178,17 +178,17 @@ jobs:
             main.js
             manifest.json
             styles.css
-            termy-${{ github.ref_name }}.zip
-            binaries/termy-server-win32-x64.exe
-            binaries/termy-server-win32-x64.exe.sha256
-            binaries/termy-server-darwin-arm64
-            binaries/termy-server-darwin-arm64.sha256
-            binaries/termy-server-darwin-x64
-            binaries/termy-server-darwin-x64.sha256
-            binaries/termy-server-linux-x64
-            binaries/termy-server-linux-x64.sha256
-            binaries/termy-server-linux-arm64
-            binaries/termy-server-linux-arm64.sha256
+            scoria-${{ github.ref_name }}.zip
+            binaries/scoria-server-win32-x64.exe
+            binaries/scoria-server-win32-x64.exe.sha256
+            binaries/scoria-server-darwin-arm64
+            binaries/scoria-server-darwin-arm64.sha256
+            binaries/scoria-server-darwin-x64
+            binaries/scoria-server-darwin-x64.sha256
+            binaries/scoria-server-linux-x64
+            binaries/scoria-server-linux-x64.sha256
+            binaries/scoria-server-linux-arm64
+            binaries/scoria-server-linux-arm64.sha256
           body_path: release-body.md
           draft: false
           prerelease: false

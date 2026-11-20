@@ -31,8 +31,8 @@ test('renderReleaseBody describes the package without requiring CHANGELOG.md as 
     repository: 'ZyphrZero/Termy',
   });
 
-  assert.match(body, /Download `termy-1\.3\.0\.zip` \(includes plugin files and all platform binaries\)/);
-  assert.doesNotMatch(body, /Download `termy\.zip`/);
+  assert.match(body, /Download `scoria-1\.3\.0\.zip` \(includes plugin files and all platform binaries\)/);
+  assert.doesNotMatch(body, /Download `scoria\.zip`/);
   assert.doesNotMatch(body, /includes all platform binaries and `CHANGELOG\.md`/);
   assert.match(body, /\[Telegram Group\]\(https:\/\/t\.me\/\+t6oRqhaw8c1jNzE1\)/);
   assert.doesNotMatch(body, /\[Discussions\]\(/);

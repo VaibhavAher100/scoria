@@ -8,8 +8,8 @@ import {
   type DaemonRecord,
 } from './daemonRecord.ts';
 
-const VALID_PIPE = '\\\\.\\pipe\\termy-12345678-1234-1234-1234-1234567890ab';
-const VALID_SOCKET = '/run/user/1000/termy-12345678-1234-1234-1234-1234567890ab/daemon.sock';
+const VALID_PIPE = '\\\\.\\pipe\\scoria-12345678-1234-1234-1234-1234567890ab';
+const VALID_SOCKET = '/run/user/1000/scoria-123456781234123412341234567890ab/daemon.sock';
 
 function validRecord(): DaemonRecord {
   return {
@@ -44,7 +44,7 @@ test('round-trips a valid socket record', () => {
 test('accepts a socket under the system temp dir (no XDG_RUNTIME_DIR)', () => {
   const record = {
     ...validSocketRecord(),
-    socket: '/var/folders/ab/T/termy-12345678-1234-1234-1234-1234567890ab/daemon.sock',
+    socket: '/var/folders/ab/T/scoria-123456781234123412341234567890ab/daemon.sock',
   };
   assert.deepEqual(parseDaemonRecord(JSON.stringify(record)), record);
 });
@@ -52,14 +52,17 @@ test('accepts a socket under the system temp dir (no XDG_RUNTIME_DIR)', () => {
 test('rejects a socket path that fails SOCKET_PATH_RE', () => {
   // Wrong filename, wrong dir prefix, relative path, and a traversal attempt.
   for (const socket of [
-    '/run/user/1000/termy-12345678-1234-1234-1234-1234567890ab/evil.sock',
+    '/run/user/1000/scoria-123456781234123412341234567890ab/evil.sock',
     '/run/user/1000/other-12345678-1234-1234-1234-1234567890ab/daemon.sock',
     '/tmp/daemon.sock',
-    'termy-12345678-1234-1234-1234-1234567890ab/daemon.sock',
-    '/tmp/termy-12345678-1234-1234-1234-1234567890ab/../../evil/daemon.sock',
+    'scoria-123456781234123412341234567890ab/daemon.sock',
+    '/tmp/scoria-123456781234123412341234567890ab/../../evil/daemon.sock',
     // A `..` traversal segment in the variable base is rejected, so a doctored
     // sidecar cannot escape the matched shape onto an arbitrary path.
-    '/home/victim/.config/../../../tmp/attacker/termy-12345678-1234-1234-1234-1234567890ab/daemon.sock',
+    '/home/victim/.config/../../../tmp/attacker/scoria-123456781234123412341234567890ab/daemon.sock',
+    // The hyphenated 36-char form and the pre-rename prefix are not what unix.rs produces.
+    '/run/user/1000/scoria-12345678-1234-1234-1234-1234567890ab/daemon.sock',
+    '/run/user/1000/termy-123456781234123412341234567890ab/daemon.sock',
   ]) {
     assert.equal(parseDaemonRecord(JSON.stringify({ ...validSocketRecord(), socket })), null, socket);
   }

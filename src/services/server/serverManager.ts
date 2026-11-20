@@ -42,7 +42,7 @@ import {
 } from './daemonRecord.ts';
 
 type BinaryUpdateResult = 'skipped-offline' | 'already-ready' | 'downloaded' | 'updated';
-const DEV_RELOAD_REQUEST_FILE = '.termy-dev-reload.json';
+const DEV_RELOAD_REQUEST_FILE = '.scoria-dev-reload.json';
 
 /**
  * Sidecar file recording the running daemon's pipe + pid + version so a
@@ -51,7 +51,7 @@ const DEV_RELOAD_REQUEST_FILE = '.termy-dev-reload.json';
  * validated by the exact same rule, so a tampered sidecar cannot steer the
  * client at a foreign pipe.
  */
-const DAEMON_RECORD_FILE = '.termy-daemon.json';
+const DAEMON_RECORD_FILE = '.scoria-daemon.json';
 const DEV_RELOAD_PHASE_INSTALLING = 'installing';
 
 interface ServerExitDetails {
@@ -565,7 +565,7 @@ export class ServerManager {
     const platform = process.platform;
     const arch = process.arch;
     const ext = platform === 'win32' ? '.exe' : '';
-    const filename = `termy-server-${platform}-${arch}${ext}`;
+    const filename = `scoria-server-${platform}-${arch}${ext}`;
     
     return this.path.join(this.pluginDir, 'binaries', filename);
   }
@@ -880,7 +880,7 @@ export class ServerManager {
    * record cannot steer us at a foreign-*named* pipe or an arbitrary socket path;
    * reaching an endpoint owned by a *different user* is blocked by the pipe DACL
    * (Windows) or the 0600/0700 socket perms (Unix). A same-user process squatting
-   * a `termy-<uuid>` name is inside the trusted (same-user) threat model.
+   * a `scoria-<uuid>` name is inside the trusted (same-user) threat model.
    */
   private async tryReuseDaemon(allowReuse = true): Promise<boolean> {
     const record = this.readDaemonRecord();
@@ -1299,7 +1299,7 @@ export class ServerManager {
       }
 
       const request = JSON.parse(this.fs.readFileSync(requestPath, 'utf-8')) as DevReloadRequest;
-      if (request.pluginId && request.pluginId !== 'termy') {
+      if (request.pluginId && request.pluginId !== 'scoria') {
         return false;
       }
       if (request.phase !== DEV_RELOAD_PHASE_INSTALLING) {

@@ -1,5 +1,5 @@
 /**
- * Daemon sidecar record (`.termy-daemon.json`).
+ * Daemon sidecar record (`.scoria-daemon.json`).
  *
  * Persisted next to the plugin when the native daemon starts so a reloaded
  * plugin can re-discover an already-running daemon instead of spawning a new
@@ -11,19 +11,19 @@
  */
 
 /**
- * Shape the persisted (and announced) pipe path must match: `\\.\pipe\termy-<uuid>`.
+ * Shape the persisted (and announced) pipe path must match: `\\.\pipe\scoria-<uuid>`.
  * Single source of truth - ServerManager imports this rather than redeclaring it,
  * so the sidecar and the live stdout path are validated by the exact same rule.
  * A tampered sidecar therefore cannot steer the client at a foreign-*named*
  * pipe; reaching a pipe owned by a *different user* is separately blocked by the
- * pipe's user-only DACL. (A same-user process squatting a `termy-<uuid>` name is
+ * pipe's user-only DACL. (A same-user process squatting a `scoria-<uuid>` name is
  * inside the trusted same-user threat model.)
  */
-export const PIPE_NAME_RE = /^\\\\\.\\pipe\\termy-[0-9a-f-]{36}$/i;
+export const PIPE_NAME_RE = /^\\\\\.\\pipe\\scoria-[0-9a-f-]{36}$/i;
 
 /**
  * Shape the persisted (and announced) Unix-socket path must match:
- * `<base>/termy-<uuid>/daemon.sock`, the structure `unix.rs::new_socket_path`
+ * `<base>/scoria-<32-hex uuid>/daemon.sock`, the structure `unix.rs::new_socket_path`
  * always produces (a per-start GUID-named 0700 directory under
  * `$XDG_RUNTIME_DIR` or the temp dir, with a fixed `daemon.sock` node). The
  * variable `<base>` is matched loosely (any non-empty, slash/NUL/newline-free
@@ -35,7 +35,7 @@ export const PIPE_NAME_RE = /^\\\\\.\\pipe\\termy-[0-9a-f-]{36}$/i;
  * trusted threat model, same as the pipe).
  */
 export const SOCKET_PATH_RE =
-  /^\/(?:(?!\.\.\/)[^/\0\n]+\/)*termy-[0-9a-f-]{36}\/daemon\.sock$/i;
+  /^\/(?:(?!\.\.\/)[^/\0\n]+\/)*scoria-[0-9a-f]{32}\/daemon\.sock$/i;
 
 export interface DaemonRecord {
   /** The daemon's named-pipe path (Windows). Exactly one of pipe/socket is set. */

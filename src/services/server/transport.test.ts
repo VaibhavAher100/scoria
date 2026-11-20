@@ -8,7 +8,7 @@ import { PipeTransport, WebSocketTransport, type TransportMessage } from './tran
 
 /** Spin up a named-pipe echo server that replies to each frame it receives. */
 function startEchoPipe(): Promise<{ path: string; server: net.Server }> {
-  const path = `\\\\.\\pipe\\termy-test-${randomUUID()}`;
+  const path = `\\\\.\\pipe\\scoria-test-${randomUUID()}`;
   const server = net.createServer((socket) => {
     const decoder = new FrameDecoder();
     socket.on('data', (chunk: Buffer) => {
@@ -71,7 +71,7 @@ test('PipeTransport connects, frames a send, and decodes the framed reply', asyn
 });
 
 test('PipeTransport rejects when the pipe does not exist', async () => {
-  const path = `\\\\.\\pipe\\termy-test-missing-${randomUUID()}`;
+  const path = `\\\\.\\pipe\\scoria-test-missing-${randomUUID()}`;
   const transport = new PipeTransport(path, (p) => net.connect(p), 1000);
   await assert.rejects(
     transport.connect({ onMessage: () => {}, onClose: () => {}, onError: () => {} })

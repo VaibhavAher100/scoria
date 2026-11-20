@@ -1,7 +1,7 @@
 /**
  * Helpers for writing/clearing the dev-install sentinel file.
  *
- * The sentinel is a vault-local marker (`.termy-dev-reload.json`) written into
+ * The sentinel is a vault-local marker (`.scoria-dev-reload.json`) written into
  * the installed plugin directory while `pnpm install:dev` is replacing files.
  * A running Termy instance reads it from `ServerManager` to suppress
  * WebSocket auto-reconnect and server auto-restart for the duration of the
@@ -15,7 +15,7 @@
 import fs from 'fs';
 import path from 'path';
 
-export const DEV_RELOAD_REQUEST_FILE = '.termy-dev-reload.json';
+export const DEV_RELOAD_REQUEST_FILE = '.scoria-dev-reload.json';
 export const DEV_RELOAD_PHASE_INSTALLING = 'installing';
 
 function createRequestId() {
@@ -23,7 +23,7 @@ function createRequestId() {
 }
 
 export function createDevInstallRequest({
-  pluginId = 'termy',
+  pluginId = 'scoria',
   requestId = createRequestId(),
   requestedAt = new Date(),
   activeUntil = new Date(Date.now() + 2 * 60 * 1000),
