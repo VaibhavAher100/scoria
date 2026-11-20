@@ -25,6 +25,7 @@ import type { ServerManager } from '@/services/server/serverManager';
 import type { PtyClient } from '@/services/server/ptyClient';
 import { getSelectableShellTypes } from './shellProfiles';
 import { quoteShellArgument, shellQuoteStyleFor, stripShellControlChars } from './terminalPathUtils';
+import { decideTerminalClose } from './unloadPolicy';
 
 // Preload the TerminalInstance module to avoid dynamic import latency when creating the first terminal
 let terminalInstanceModule: typeof import('./terminalInstance') | null = null;
@@ -63,6 +64,10 @@ export class TerminalService {
   
   // Shutdown state flag
   private isShuttingDown = false;
+
+  // During a plugin unload: keep the daemon sessions (reload/update) or kill
+  // them (user disabled the plugin). See unloadPolicy.ts (defect D1).
+  private keepSessionsOnUnload = true;
 
   constructor(
     app: App,
@@ -386,20 +391,38 @@ export class TerminalService {
   async destroyTerminal(id: string): Promise<void> {
     const terminal = this.terminals.get(id);
     if (terminal) {
+      const decision = decideTerminalClose(
+        this.isShuttingDown,
+        this.keepSessionsOnUnload,
+        this.terminals.size - 1,
+      );
       try {
-        terminal.destroy();
+        terminal.destroy(decision.keepSession);
       } catch (error) {
         errorLog(`[TerminalService] 销毁终端 ${id} 失败:`, error);
       } finally {
         this.terminals.delete(id);
-        
-        // Stop the server if this was the last terminal
-        if (this.terminals.size === 0 && !this.isShuttingDown) {
+
+        // Stop the server if the user closed the last terminal
+        if (decision.shutdownServer) {
           debugLog('[TerminalService] 最后一个终端已关闭，停止服务器');
           await this.serverManager.shutdown();
         }
       }
     }
+  }
+
+  /**
+   * Mark the start of a plugin unload (defect D1). Obsidian closes the
+   * terminal views before `onunload()` runs, so this must be called from a
+   * cleanup that runs before the view type is unregistered. After this call,
+   * a view close detaches (keep) or kills (no keep) its session and never
+   * stops the server; `shutdown()` owns that.
+   */
+  beginPluginUnload(keepSessions: boolean): void {
+    this.isShuttingDown = true;
+    this.keepSessionsOnUnload = keepSessions;
+    debugLog(`[TerminalService] 插件卸载开始 (keepSessions=${keepSessions})`);
   }
 
   /**
@@ -476,6 +499,7 @@ export class TerminalService {
    */
   async shutdown(keepAlive = false): Promise<void> {
     this.isShuttingDown = true;
+    this.keepSessionsOnUnload = keepAlive;
 
     debugLog(`[TerminalService] 开始关闭终端服务 (keepAlive=${keepAlive})`);
 
