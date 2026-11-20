@@ -24,6 +24,7 @@ import { t } from '@/i18n';
 import type { ServerManager } from '@/services/server/serverManager';
 import type { PtyClient } from '@/services/server/ptyClient';
 import { getSelectableShellTypes } from './shellProfiles';
+import { quoteShellArgument, shellQuoteStyleFor, stripShellControlChars } from './terminalPathUtils';
 
 // Preload the TerminalInstance module to avoid dynamic import latency when creating the first terminal
 let terminalInstanceModule: typeof import('./terminalInstance') | null = null;
@@ -236,7 +237,7 @@ export class TerminalService {
         wikilink: {
           isEnabled: () => this.settings.wikilinkAutocomplete,
           listEntries: () => this.listWikilinkEntries(),
-          resolveInsertion: (entry, query) => this.resolveWikilinkInsertion(entry, query),
+          resolveInsertion: (entry, query) => this.resolveWikilinkInsertion(entry, query, currentShell),
         },
         scrollback: this.settings.scrollback,
         preferredRenderer: this.settings.preferredRenderer,
@@ -337,18 +338,24 @@ export class TerminalService {
    * the brackets. Unresolved entries (no on-disk file) always fall back to the
    * wikilink form.
    */
-  private resolveWikilinkInsertion(entry: AutocompleteEntry | null, query: string): string {
+  private resolveWikilinkInsertion(entry: AutocompleteEntry | null, query: string, shellType: ShellType): string {
     const mode = this.settings.wikilinkInsertMode;
-    const quote = (p: string): string => (/\s/.test(p) ? `"${p.replace(/"/g, '\\"')}"` : p);
 
     if (entry && entry.path && (mode === 'vault-path' || mode === 'absolute-path')) {
       const ERASE_BRACKETS = '\x7f\x7f';
       const path = mode === 'absolute-path' ? this.getAbsolutePath(entry.path) : entry.path;
-      return `${ERASE_BRACKETS}${quote(path)}`;
+      // Always quote for the active shell. If the shell is unknown or the
+      // path cannot be quoted safely, fall back to the wikilink form below.
+      const style = shellQuoteStyleFor(shellType);
+      const quoted = style ? quoteShellArgument(path, style) : null;
+      if (quoted) {
+        return `${ERASE_BRACKETS}${quoted}`;
+      }
     }
 
-    if (entry) return `${entry.name}]]`;
-    if (query.length > 0) return `${query}]]`;
+    // Typed input reaches the shell as-is: never forward control characters.
+    if (entry) return `${stripShellControlChars(entry.name)}]]`;
+    if (query.length > 0) return `${stripShellControlChars(query)}]]`;
     return ']]';
   }
 

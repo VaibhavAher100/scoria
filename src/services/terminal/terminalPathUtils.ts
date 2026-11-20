@@ -232,6 +232,46 @@ export interface WikilinkRange {
   linkpath: string;
 }
 
+export interface TerminalBufferCellLike {
+  getChars(): string;
+  getWidth(): number;
+}
+
+/**
+ * Convert a JavaScript string index into a 0-based xterm buffer column.
+ * JavaScript indexes UTF-16 code units while xterm columns follow rendered
+ * cell widths, so they diverge for emoji, CJK, and combining characters.
+ */
+export function terminalStringIndexToBufferColumn(
+  stringIndex: number,
+  cellCount: number,
+  getCell: (column: number) => TerminalBufferCellLike | undefined
+): number {
+  const targetIndex = Math.max(0, stringIndex);
+  let currentIndex = 0;
+  let column = 0;
+
+  while (column < cellCount) {
+    if (currentIndex >= targetIndex) {
+      return column;
+    }
+
+    const cell = getCell(column);
+    if (!cell) {
+      currentIndex += 1;
+      column += 1;
+      continue;
+    }
+
+    const width = cell.getWidth();
+    const chars = cell.getChars();
+    currentIndex += chars.length > 0 ? chars.length : width === 1 ? 1 : 0;
+    column += Math.max(1, width);
+  }
+
+  return cellCount;
+}
+
 const WIKILINK_PATTERN = /\[\[([^[\]\n]+?)\]\]/g;
 
 /**
@@ -362,4 +402,99 @@ export function findUniqueTerminalEntryByBasename<T extends TerminalNamedPathEnt
   }
 
   return candidateEntries[0];
+}
+
+// Passive file types that the OS default app opens without running code.
+// Anything else (executables, scripts, shortcuts, installers, source files
+// that a launcher may run, and Office/RTF/XML documents, which have a history
+// of parser exploits and get no Mark-of-the-Web when a terminal creates them)
+// is only revealed in the file manager.
+const EXTERNALLY_OPENABLE_EXTENSIONS = new Set([
+  'pdf', 'txt', 'md', 'log', 'json', 'yaml', 'yml', 'toml',
+  'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'tif', 'tiff',
+  'mp3', 'wav', 'flac', 'ogg', 'm4a', 'mp4', 'mkv', 'webm', 'mov', 'avi',
+]);
+
+/**
+ * Whether a path is a network path (UNC `\\host\share`, `//host/share`, or a
+ * `\\?\` / `\\.\` device path). Terminal output must never make the plugin
+ * touch one: any file system call on a UNC path authenticates over SMB.
+ */
+export function isNetworkTerminalPath(filePath: string): boolean {
+  return /^[\\/]{2}/.test(filePath);
+}
+
+/** Whether a non-vault file may be opened with its default app on a click. */
+export function isExternallyOpenableFile(filePath: string): boolean {
+  const base = filePath.split(/[\\/]/).pop() ?? '';
+  const dot = base.lastIndexOf('.');
+  if (dot <= 0 || dot === base.length - 1) {
+    return false;
+  }
+  // Windows ignores trailing dots and spaces, so "a.exe." runs as "a.exe".
+  if (/[. ]$/.test(base)) {
+    return false;
+  }
+  return EXTERNALLY_OPENABLE_EXTENSIONS.has(base.slice(dot + 1).toLowerCase());
+}
+
+/** How a shell parses a quoted argument. */
+export type ShellQuoteStyle = 'posix' | 'powershell' | 'cmd';
+
+/**
+ * The quote style for a configured shell type, or null when no safe rule is
+ * known (a custom shell). Callers must not insert a raw path for null.
+ */
+export function shellQuoteStyleFor(shellType: string): ShellQuoteStyle | null {
+  switch (shellType) {
+    case 'bash':
+    case 'zsh':
+    case 'gitbash':
+    case 'wsl':
+    case 'tmux':
+      return 'posix';
+    case 'powershell':
+    case 'pwsh':
+      return 'powershell';
+    case 'cmd':
+      return 'cmd';
+    default:
+      return null;
+  }
+}
+
+// C0 and C1 control characters, DEL included. A CR or LF in inserted text
+// would submit the command line before the user sees it.
+// eslint-disable-next-line no-control-regex
+const SHELL_CONTROL_CHARS_RE = /[\u0000-\u001f\u007f-\u009f]/g;
+
+/** Remove control characters from text that goes to the shell as typed input. */
+export function stripShellControlChars(value: string): string {
+  return value.replace(SHELL_CONTROL_CHARS_RE, '');
+}
+
+// Characters that any supported shell (bash/zsh/fish, PowerShell, cmd)
+// interprets inside or around quotes, plus the typographic quotes PowerShell
+// treats as quote marks, the characters that Windows "best fit" conversion
+// maps to ASCII metacharacters (fullwidth forms, U+02BA, U+2033, U+3003,
+// U+00A5), and bidi controls that can hide text on the command line.
+const SHELL_UNSAFE_CHARS_RE =
+  /[$`'"%!&|<>^;¥ʺ‘-‟″‪-‮⁦-⁩〃！＂＄-＇；＜＞＼＾｀｜]/;
+
+/**
+ * Quote a value as one literal shell argument. The value must be safe in
+ * every supported shell, not only in `style`: the configured shell type can
+ * differ from the program that reads the input (the user may have started
+ * bash inside cmd). Returns null when the value is empty, starts with `-`
+ * (option injection), or holds a control or shell-unsafe character. The
+ * caller then falls back to the plain `[[name]]` form.
+ */
+export function quoteShellArgument(value: string, style: ShellQuoteStyle): string | null {
+  if (value.length === 0 || value.startsWith('-')) {
+    return null;
+  }
+  if (stripShellControlChars(value) !== value || SHELL_UNSAFE_CHARS_RE.test(value)) {
+    return null;
+  }
+  return style === 'cmd' ? `"${value}"` : `'${value}'`;
 }

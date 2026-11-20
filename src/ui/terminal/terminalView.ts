@@ -29,6 +29,8 @@ import {
   getVaultRelativePathFromAbsolute,
   isBasenameOnlyTerminalToken,
   isAbsoluteTerminalPath,
+  isExternallyOpenableFile,
+  isNetworkTerminalPath,
   joinTerminalPaths,
   normalizeDroppedEntryReference,
   normalizeTerminalRawToken,
@@ -37,6 +39,7 @@ import {
   normalizeVaultPath,
   obsidianUriToVaultPath,
   scanWikilinkRanges,
+  terminalStringIndexToBufferColumn,
   toPlatformPath,
 } from '../../services/terminal/terminalPathUtils';
 import { TERMINAL_FILE_URI_REGEX } from '../../services/terminal/terminalFileLinks';
@@ -970,8 +973,22 @@ export class TerminalView extends ItemView {
         callback(ranges.map((range) => ({
           text: text.slice(range.startIndex, range.endIndex),
           range: {
-            start: { x: range.startIndex + 1, y: bufferLineNumber },
-            end: { x: range.endIndex, y: bufferLineNumber },
+            start: {
+              x: terminalStringIndexToBufferColumn(
+                range.startIndex,
+                bufferLine.length,
+                (column) => bufferLine.getCell(column) ?? undefined
+              ) + 1,
+              y: bufferLineNumber,
+            },
+            end: {
+              x: terminalStringIndexToBufferColumn(
+                range.endIndex,
+                bufferLine.length,
+                (column) => bufferLine.getCell(column) ?? undefined
+              ),
+              y: bufferLineNumber,
+            },
           },
           activate: (event: MouseEvent) => {
             event.preventDefault();
@@ -1048,24 +1065,45 @@ export class TerminalView extends ItemView {
       return;
     }
 
-    const errorMessage = await shell.openPath(resolved.externalPath);
-    if (errorMessage) {
-      if (this.fs.existsSync(resolved.externalPath)) {
-        const containingDir = this.path.dirname(resolved.externalPath);
-        const directoryError = await shell.openPath(containingDir);
-        if (!directoryError) {
-          return;
-        }
-      }
+    // Terminal output is untrusted: a click must never run a program. Decide
+    // on the real path (symlinks resolved), never on the printed name. Open
+    // passive documents, and folders except on macOS (an .app bundle is a
+    // folder); only reveal anything else.
+    let realPath: string;
+    let isDirectory: boolean;
+    try {
+      realPath = this.fs.realpathSync(resolved.externalPath);
+      isDirectory = this.fs.statSync(realPath).isDirectory();
+    } catch {
+      new Notice(t('notices.terminal.fileReferenceUnavailable'));
+      return;
+    }
+    if (isNetworkTerminalPath(realPath)) {
+      new Notice(t('notices.terminal.fileReferenceUnavailable'));
+      return;
+    }
+    const mayOpen = isDirectory ? process.platform !== 'darwin' : isExternallyOpenableFile(realPath);
+    if (!mayOpen) {
+      shell.showItemInFolder(realPath);
+      return;
+    }
 
-      errorLog('[TerminalView] Failed to open external path:', resolved.externalPath, errorMessage);
-      new Notice(t('notices.terminal.fileReferenceOpenFailed'));
+    const errorMessage = await shell.openPath(realPath);
+    if (errorMessage) {
+      // Reveal only: opening the parent folder could launch an app bundle.
+      errorLog('[TerminalView] Failed to open external path:', realPath, errorMessage);
+      shell.showItemInFolder(realPath);
     }
   }
 
   private resolveTerminalFileReference(pathLike: string): { file?: TFile; externalPath: string } | null {
     const normalizedReference = normalizeTerminalReferencePath(pathLike);
     if (!normalizedReference) {
+      return null;
+    }
+    // Never touch a network path from terminal output: even an existence
+    // check authenticates over SMB and leaks the user's NTLM hash.
+    if (isNetworkTerminalPath(normalizedReference)) {
       return null;
     }
 
@@ -1094,6 +1132,10 @@ export class TerminalView extends ItemView {
     }
 
     for (const absolutePath of this.getTerminalReferenceAbsoluteCandidates(normalizedReference)) {
+      // A relative reference joined to a UNC cwd is a network path too.
+      if (isNetworkTerminalPath(absolutePath)) {
+        continue;
+      }
       const fileFromCandidate = this.absolutePathToVaultFile(absolutePath);
       if (fileFromCandidate) {
         return {

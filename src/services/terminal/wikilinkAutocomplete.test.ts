@@ -29,14 +29,17 @@ function makeHost(overrides: Partial<WikilinkAutocompleteHost> = {}): {
   return { host, written };
 }
 
-function keydown(key: string): KeyboardEvent {
+function keydown(
+  key: string,
+  modifiers: Partial<Pick<KeyboardEvent, 'ctrlKey' | 'metaKey' | 'altKey'>> = {}
+): KeyboardEvent {
   let prevented = false;
   return {
     type: 'keydown',
     key,
-    ctrlKey: false,
-    metaKey: false,
-    altKey: false,
+    ctrlKey: modifiers.ctrlKey ?? false,
+    metaKey: modifiers.metaKey ?? false,
+    altKey: modifiers.altKey ?? false,
     preventDefault: () => { prevented = true; },
     get defaultPrevented() { return prevented; },
   } as unknown as KeyboardEvent;
@@ -61,10 +64,18 @@ test('does not activate when disabled', () => {
   ac.dispose();
 });
 
-test('a paste containing [[ activates', () => {
+test('a completed paste containing [[ does not activate', () => {
   const { host } = makeHost();
   const ac = new WikilinkAutocomplete(makeTerminal(), host);
   ac.handleData('echo [[note');
+  assert.equal(ac.isActive(), false);
+  ac.dispose();
+});
+
+test('a multi-character input chunk ending in [[ activates', () => {
+  const { host } = makeHost();
+  const ac = new WikilinkAutocomplete(makeTerminal(), host);
+  ac.handleData('echo [[');
   assert.equal(ac.isActive(), true);
   ac.dispose();
 });
@@ -101,6 +112,21 @@ test('dismiss with a query sends the typed query back to the shell', () => {
   ac.handleData('[');
   ac.handleKey(keydown('x'));
   ac.handleKey(keydown('Escape'));
+  assert.deepEqual(written, ['x']);
+  ac.dispose();
+});
+
+test('modifier shortcuts dismiss autocomplete and pass through to the terminal', () => {
+  const { host, written } = makeHost();
+  const ac = new WikilinkAutocomplete(makeTerminal(), host);
+  ac.handleData('[');
+  ac.handleData('[');
+  ac.handleKey(keydown('x'));
+
+  const shortcut = keydown('c', { ctrlKey: true });
+  assert.equal(ac.handleKey(shortcut), false);
+  assert.equal(shortcut.defaultPrevented, false);
+  assert.equal(ac.isActive(), false);
   assert.deepEqual(written, ['x']);
   ac.dispose();
 });

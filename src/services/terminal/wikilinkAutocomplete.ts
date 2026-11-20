@@ -83,8 +83,16 @@ export class WikilinkAutocomplete {
     if (!this.host.isEnabled() || this.active) return;
 
     if (data.length > 1) {
-      if (data.includes('[[')) this.activate();
-      this.lastCharWasBracket = data.endsWith('[');
+      // A completed paste has already been sent to the PTY. Activating for a
+      // `[[` in the middle would capture later keys with an empty query and
+      // could append the wrong note. Only activate when the chunk itself ends
+      // at the autocomplete boundary.
+      if (data.endsWith('[[')) {
+        this.lastCharWasBracket = false;
+        this.activate();
+      } else {
+        this.lastCharWasBracket = data.endsWith('[');
+      }
       return;
     }
 
@@ -108,6 +116,14 @@ export class WikilinkAutocomplete {
     if (!this.active) return false;
     // Only consume keydown; keypress/keyup must flow through for IME etc.
     if (e.type !== 'keydown') return false;
+
+    if (e.metaKey || e.ctrlKey || e.altKey) {
+      // Restore captured text before the terminal handles the shortcut. This
+      // keeps shell input consistent for shortcuts such as paste and lets
+      // interrupt/navigation shortcuts close the overlay immediately.
+      this.dismiss();
+      return false;
+    }
 
     switch (e.key) {
       case 'ArrowUp':
@@ -139,14 +155,13 @@ export class WikilinkAutocomplete {
         }
         return true;
       default:
-        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (e.key.length === 1) {
           e.preventDefault();
           this.query += e.key;
           this.filterResults();
           return true;
         }
-        // Let mod-combos and non-character keys fall through to the host.
-        return !(e.metaKey || e.ctrlKey || e.altKey);
+        return true;
     }
   }
 
@@ -233,7 +248,7 @@ export class WikilinkAutocomplete {
     const win = doc.defaultView ?? window;
 
     if (win.getComputedStyle(container).position === 'static') {
-      container.style.position = 'relative';
+      container.setCssProps({ position: 'relative' });
     }
 
     if (!this.dropdownEl || this.dropdownEl.ownerDocument !== doc) {
@@ -280,7 +295,7 @@ export class WikilinkAutocomplete {
       } else if (!entry.isFile) {
         const note = doc.createElement('span');
         note.className = 'terminal-wikilink-path';
-        note.textContent = 'no file yet';
+        note.textContent = 'No file yet';
         item.appendChild(note);
       }
 
@@ -318,15 +333,19 @@ export class WikilinkAutocomplete {
     if (left + DROPDOWN_WIDTH > containerRect.width) {
       left = Math.max(4, containerRect.width - DROPDOWN_WIDTH - 4);
     }
-    this.dropdownEl.style.left = `${left}px`;
+    this.dropdownEl.setCssProps({ left: `${left}px` });
 
     const cursorBottom = offsetY + (cursorY + 1) * cellH;
     if (containerHeight - cursorBottom > DROPDOWN_HEIGHT || cursorY < this.terminal.rows / 2) {
-      this.dropdownEl.style.top = `${cursorBottom}px`;
-      this.dropdownEl.style.bottom = '';
+      this.dropdownEl.setCssProps({
+        top: `${cursorBottom}px`,
+        bottom: '',
+      });
     } else {
-      this.dropdownEl.style.bottom = `${containerHeight - (offsetY + cursorY * cellH)}px`;
-      this.dropdownEl.style.top = '';
+      this.dropdownEl.setCssProps({
+        bottom: `${containerHeight - (offsetY + cursorY * cellH)}px`,
+        top: '',
+      });
     }
   }
 
