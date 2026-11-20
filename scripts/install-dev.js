@@ -10,7 +10,7 @@
  *   --no-build  Skip the TypeScript/esbuild plugin build (`pnpm build`)
  *   --no-rust   Skip the native PTY server build (`pnpm build:rust`).
  *               Useful when only the TypeScript layer changed and the
- *               existing `binaries/<termy-server>` is still up to date.
+ *               existing `binaries/<scoria-server>` is still up to date.
  *   --reset     Reset saved configuration
  */
 
@@ -41,7 +41,7 @@ const VAULT_PATH = args.find(arg => !arg.startsWith('-')) || null;
 
 // Termy server configuration
 const SERVER_CONFIG = {
-  name: 'termy-server',
+  name: 'scoria-server',
   displayName: 'Termy Server'
 };
 
@@ -130,9 +130,9 @@ function killObsidian() {
 
 function getWindowsTermyImageNames() {
   return [
-    'termy-server-win32-x64.exe',
-    'termy-server-win32-arm64.exe',
-    'termy-server.exe',
+    'scoria-server-win32-x64.exe',
+    'scoria-server-win32-arm64.exe',
+    'scoria-server.exe',
   ];
 }
 
@@ -372,7 +372,7 @@ async function main() {
   log('');
 
   // 4. Stop running processes that may lock the installed plugin files
-  const targetDir = path.join(pluginsDir, 'termy');
+  const targetDir = path.join(pluginsDir, 'scoria');
   if (!fs.existsSync(targetDir)) {
     fs.mkdirSync(targetDir, { recursive: true });
   }

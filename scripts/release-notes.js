@@ -62,7 +62,7 @@ export function readChangelogSection(version, changelogPath = DEFAULT_CHANGELOG_
 
 export function renderReleaseBody({ version, changelogSection, repository = DEFAULT_REPOSITORY }) {
   const repoUrl = `https://github.com/${repository}`;
-  const fullPackageName = `termy-${version}.zip`;
+  const fullPackageName = `scoria-${version}.zip`;
 
   return [
     `## Changelog`,
@@ -93,13 +93,13 @@ export function renderReleaseBody({ version, changelogSection, repository = DEFA
     '**Option 2: Platform-Specific (Smaller Download)**',
     '1. Download the three core files: `main.js`, `manifest.json`, `styles.css`',
     '2. Download the binary for your platform:',
-    '   - **Windows**: `termy-server-win32-x64.exe`',
-    '   - **macOS (Apple Silicon)**: `termy-server-darwin-arm64`',
-    '   - **macOS (Intel)**: `termy-server-darwin-x64`',
-    '   - **Linux (x64)**: `termy-server-linux-x64`',
-    '   - **Linux (ARM64)**: `termy-server-linux-arm64`',
-    '3. Create directory: `.obsidian/plugins/termy/binaries/`',
-    '4. Place core files in `termy/` and binary in `binaries/`',
+    '   - **Windows**: `scoria-server-win32-x64.exe`',
+    '   - **macOS (Apple Silicon)**: `scoria-server-darwin-arm64`',
+    '   - **macOS (Intel)**: `scoria-server-darwin-x64`',
+    '   - **Linux (x64)**: `scoria-server-linux-x64`',
+    '   - **Linux (ARM64)**: `scoria-server-linux-arm64`',
+    '3. Create directory: `.obsidian/plugins/scoria/binaries/`',
+    '4. Place core files in `scoria/` and binary in `binaries/`',
     '5. Restart Obsidian and enable the plugin',
     '',
     '## Full Changelog',

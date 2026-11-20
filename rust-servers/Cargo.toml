@@ -1,12 +1,12 @@
 # Rust terminal server
 [package]
-name = "termy-server"
+name = "scoria-server"
 version = "1.0.0"
 edition = "2021"
 description = "Terminal server for Termy plugin"
 
 [[bin]]
-name = "termy-server"
+name = "scoria-server"
 path = "src/main.rs"
 
 [dependencies]

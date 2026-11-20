@@ -57,7 +57,9 @@ const READ_BUFFER_SIZE: usize = 8192;
 /// name - and is removed on daemon exit.
 pub fn new_socket_path() -> std::io::Result<PathBuf> {
     let base = pick_base_dir();
-    let dir = base.join(format!("termy-{}", Uuid::new_v4()));
+    // 32-hex (simple) UUID: the hyphenated form makes a macOS temp-dir path 104 bytes,
+    // over the 103-byte sun_path limit.
+    let dir = base.join(format!("scoria-{}", Uuid::new_v4().simple()));
     // mode(0o700) is masked by umask, which can only CLEAR bits; 0700 has no
     // group/other bits to begin with, so the result is 0700 under any umask.
     std::fs::DirBuilder::new().mode(0o700).create(&dir)?;
@@ -379,9 +381,25 @@ mod tests {
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 
+    /// The plugin (daemonRecord.ts SOCKET_PATH_RE) accepts only `<base>/scoria-<32-hex uuid>/daemon.sock`.
+    #[test]
+    fn socket_path_has_scoria_dir_and_uuid() {
+        let path = new_socket_path().unwrap();
+        let dir = path.parent().unwrap();
+        let name = dir.file_name().unwrap().to_str().unwrap();
+        let id = name.strip_prefix("scoria-").expect("prefix");
+        assert_eq!(id.len(), 32, "{name}");
+        assert!(id.bytes().all(|b| b.is_ascii_hexdigit()), "{name}");
+        assert_eq!(path.file_name().unwrap(), "daemon.sock");
+        // macOS: temp_dir() is `/var/folders/xx/<30 chars>/T/` (49 bytes) and
+        // sun_path holds at most 103 bytes plus the NUL.
+        assert!(49 + name.len() + "/daemon.sock".len() <= 103, "{name}");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
     #[test]
     fn private_dir_check_accepts_0700_rejects_world_writable() {
-        let base = std::env::temp_dir().join(format!("termy-test-{}", Uuid::new_v4()));
+        let base = std::env::temp_dir().join(format!("scoria-test-{}", Uuid::new_v4()));
         std::fs::create_dir(&base).unwrap();
 
         // Owned by us and 0700 -> accepted as a private runtime dir.

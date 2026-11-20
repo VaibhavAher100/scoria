@@ -76,14 +76,14 @@ jobs:
         shell: bash
         run: |
           mkdir -p binaries
-          BINARY_NAME="termy-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}"
-          cp "rust-servers/target/${{ matrix.target }}/release/termy-server${{ matrix.ext }}" "binaries/${BINARY_NAME}"
+          BINARY_NAME="scoria-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}"
+          cp "rust-servers/target/${{ matrix.target }}/release/scoria-server${{ matrix.ext }}" "binaries/${BINARY_NAME}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: termy-server-${{ matrix.platform }}-${{ matrix.arch }}
-          path: binaries/termy-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}
+          name: scoria-server-${{ matrix.platform }}-${{ matrix.arch }}
+          path: binaries/scoria-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}
 
   test:
     name: Test ${{ matrix.platform }}-${{ matrix.arch }}
@@ -112,13 +112,13 @@ jobs:
       - name: Download artifact
         uses: actions/download-artifact@v7
         with:
-          name: termy-server-${{ matrix.platform }}-${{ matrix.arch }}
+          name: scoria-server-${{ matrix.platform }}-${{ matrix.arch }}
           path: binaries
 
       - name: Test binary
         shell: bash
         run: |
-          BINARY="binaries/termy-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}"
+          BINARY="binaries/scoria-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}"
           chmod +x "${BINARY}" 2>/dev/null || true
           
           "${BINARY}" --port 0 > output.txt 2>&1 &

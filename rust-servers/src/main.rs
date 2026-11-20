@@ -55,7 +55,7 @@ fn parse_args() -> u16 {
                 port = arg.trim_start_matches("--port=").parse().unwrap_or(0);
             }
             "-h" | "--help" => {
-                eprintln!("Usage: termy-server [OPTIONS]");
+                eprintln!("Usage: scoria-server [OPTIONS]");
                 eprintln!("Options:");
                 eprintln!("  -p, --port <PORT>         监听端口 (0 表示随机端口) [默认: 0]");
                 eprintln!("  -h, --help                显示帮助信息");

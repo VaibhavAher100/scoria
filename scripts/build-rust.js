@@ -1,7 +1,7 @@
 /**
  * Termy Server Build Script
- * Auto-detect current platform and build the termy server binary
- * Binary naming: termy-server-{platform}-{arch}
+ * Auto-detect current platform and build the scoria server binary
+ * Binary naming: scoria-server-{platform}-{arch}
  */
 
 import { execSync } from 'child_process';
@@ -44,9 +44,9 @@ const PLATFORMS = {
 
 // Termy server configuration
 const SERVER_CONFIG = {
-  name: 'termy-server',
+  name: 'scoria-server',
   displayName: 'Termy Server',
-  binaryPrefix: 'termy-server'
+  binaryPrefix: 'scoria-server'
 };
 
 // Reference binary size (for hints only)
@@ -118,7 +118,7 @@ function showHelp() {
   console.log('  -h, --help           Show this help message');
   console.log('');
   console.log('Output:');
-  console.log('  Binary: binaries/termy-server-{platform}-{arch}[.exe]');
+  console.log('  Binary: binaries/scoria-server-{platform}-{arch}[.exe]');
   console.log('');
   console.log('Examples:');
   console.log('  node build-rust.js              # Build for current platform');

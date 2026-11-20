@@ -26,7 +26,7 @@ export interface ResolveBinaryAssetUrlsOptions extends BinaryDownloadConfig {
 
 function buildBinaryFilename(platform: string, arch: string): string {
   const ext = platform === 'win32' ? '.exe' : '';
-  return `termy-server-${platform}-${arch}${ext}`;
+  return `scoria-server-${platform}-${arch}${ext}`;
 }
 
 export function resolveBinaryAssetUrls(options: ResolveBinaryAssetUrlsOptions): BinaryInfo {

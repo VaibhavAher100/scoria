@@ -721,7 +721,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "termy-server"
+name = "scoria-server"
 version = "1.0.0"
 dependencies = [
  "async-trait",

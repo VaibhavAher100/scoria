@@ -24,7 +24,7 @@ test('createDevInstallRequest records the install-phase metadata', () => {
   });
 
   assert.deepEqual(request, {
-    pluginId: 'termy',
+    pluginId: 'scoria',
     requestId: 'install-1',
     phase: DEV_RELOAD_PHASE_INSTALLING,
     requestedAt: requestedAt.toISOString(),
@@ -34,11 +34,11 @@ test('createDevInstallRequest records the install-phase metadata', () => {
 });
 
 test('writeDevInstallRequest writes installing-phase marker into the plugin directory', () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'termy-install-dev-'));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scoria-install-dev-'));
 
   try {
     const { requestPath } = writeDevInstallRequest(tempDir, {
-      pluginId: 'termy',
+      pluginId: 'scoria',
       requestId: 'install-2',
       requestedAt: new Date('2026-04-26T00:00:00.000Z'),
       activeUntil: new Date('2026-04-26T00:02:00.000Z'),
@@ -47,7 +47,7 @@ test('writeDevInstallRequest writes installing-phase marker into the plugin dire
 
     assert.equal(requestPath, path.join(tempDir, DEV_RELOAD_REQUEST_FILE));
     assert.deepEqual(JSON.parse(fs.readFileSync(requestPath, 'utf-8')), {
-      pluginId: 'termy',
+      pluginId: 'scoria',
       requestId: 'install-2',
       phase: DEV_RELOAD_PHASE_INSTALLING,
       requestedAt: '2026-04-26T00:00:00.000Z',
@@ -60,7 +60,7 @@ test('writeDevInstallRequest writes installing-phase marker into the plugin dire
 });
 
 test('clearDevInstallRequest removes the installing-phase marker', () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'termy-install-dev-'));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scoria-install-dev-'));
 
   try {
     const { requestPath } = writeDevInstallRequest(tempDir, {
@@ -77,7 +77,7 @@ test('clearDevInstallRequest removes the installing-phase marker', () => {
 });
 
 test('clearDevInstallRequest tolerates missing or malformed markers', () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'termy-install-dev-'));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scoria-install-dev-'));
 
   try {
     // Missing file should not throw.

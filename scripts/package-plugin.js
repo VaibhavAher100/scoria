@@ -17,7 +17,7 @@ const __dirname = path.dirname(__filename);
 
 // Termy server configuration
 const SERVER_CONFIG = {
-  name: 'termy-server',
+  name: 'scoria-server',
   displayName: 'Termy Server'
 };
 
@@ -134,7 +134,7 @@ if (createZip) {
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   const version = manifest.version || '0.0.0';
   
-  const zipName = `termy-${version}.zip`;
+  const zipName = `scoria-${version}.zip`;
   const zipPath = path.join(ROOT_DIR, zipName);
   
   // Remove existing ZIP
