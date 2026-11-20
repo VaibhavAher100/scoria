@@ -20,11 +20,11 @@ export const ja: TranslationKeys = {
   },
 
   plugin: {
-    name: 'Termy',
-    loadingMessage: 'Termy プラグインを読み込み中',
-    loadedMessage: 'Termy プラグインを読み込みました',
-    unloadingMessage: 'Termy プラグインをアンロード中',
-    unloadedMessage: 'Termy プラグインをアンロードしました',
+    name: 'Scoria',
+    loadingMessage: 'Scoria プラグインを読み込み中',
+    loadedMessage: 'Scoria プラグインを読み込みました',
+    unloadingMessage: 'Scoria プラグインをアンロード中',
+    unloadedMessage: 'Scoria プラグインをアンロードしました',
   },
 
   terminal: {
@@ -68,10 +68,10 @@ export const ja: TranslationKeys = {
   },
 
   commands: {
-    openTerminal: 'Termyターミナルを開く',
+    openTerminal: 'Scoriaターミナルを開く',
     openTerminalCurrentFolder: '現在のファイルのフォルダーでターミナルを開く',
     openTerminalHere: 'ここでターミナルを開く',
-    showChangelog: 'Termy: 更新ログを表示',
+    showChangelog: 'Scoria: 更新ログを表示',
     terminalSearch: 'ターミナル: 検索',
     terminalClear: 'ターミナル: 画面をクリア',
     terminalCopy: 'ターミナル: コピー',
@@ -93,7 +93,7 @@ export const ja: TranslationKeys = {
   },
 
   ribbon: {
-    terminalTooltip: 'Termyターミナルを開く',
+    terminalTooltip: 'Scoriaターミナルを開く',
   },
 
   visibility: {
@@ -174,7 +174,7 @@ export const ja: TranslationKeys = {
       advanced: '詳細設定',
     },
     header: {
-      title: 'Termy',
+      title: 'Scoria',
       feedbackText: 'ご利用ありがとうございます。フィードバックはこちら: ',
       feedbackLink: 'GitHub',
       communityLink: 'Telegram',
@@ -325,7 +325,7 @@ export const ja: TranslationKeys = {
       offlineMode: 'オフラインモード',
       offlineModeDesc: '有効にするとバイナリのバージョン確認と自動ダウンロードをスキップ',
       binaryDownloadSource: 'バイナリのダウンロード元',
-      binaryDownloadSourceDesc: 'Termy のネイティブバイナリを GitHub Release または Cloudflare R2 のどちらからダウンロードするか選択します',
+      binaryDownloadSourceDesc: 'Scoria のネイティブバイナリを GitHub Release または Cloudflare R2 のどちらからダウンロードするか選択します',
       binaryDownloadSourceGithubRelease: 'GitHub Release',
       binaryDownloadSourceCloudflareR2: 'Cloudflare R2',
       binaryDownloadNow: '今すぐバイナリをダウンロード',
@@ -342,7 +342,7 @@ export const ja: TranslationKeys = {
   modals: {
     changelog: {
       title: '更新ログ',
-      subtitle: 'Termy {{version}} の更新内容',
+      subtitle: 'Scoria {{version}} の更新内容',
       loading: '更新ログを読み込み中...',
       unavailable: 'このバージョンの更新ログを読み込めませんでした。',
       openRelease: 'リリースページを開く',
@@ -359,7 +359,7 @@ export const ja: TranslationKeys = {
     launcherInstall: {
       titleNotInstalled: '{{name}} はインストールされていません',
       titleUpdate: '{{name}} を更新',
-      descriptionNotInstalled: 'Termy は PATH 上で「{{command}}」を見つけられませんでした。CLI をインストールしてから再度お試しください。',
+      descriptionNotInstalled: 'Scoria は PATH 上で「{{command}}」を見つけられませんでした。CLI をインストールしてから再度お試しください。',
       descriptionUpdate: '{{name}} の新しいリリースが利用可能です ({{local}} → {{latest}})。下記のコマンドをシステムターミナルで実行して更新してください。',
       detectedCommand: '検出されたコマンド',
       versionLabel: 'バージョン',
@@ -368,7 +368,7 @@ export const ja: TranslationKeys = {
       cardTitleUpgradeOneClick: 'ワンクリックでアップグレード',
       cardDescInstall: 'このコマンドをコピーしてシステムターミナルで実行してください。シェルから実行ファイルが見えるようになると、このランチャーは自動的に検出します。',
       cardDescUpgrade: 'このコマンドをコピーしてシステムターミナルで実行し、アップグレードしてください。新しいバージョンがシェルから到達可能になると、このランチャーは自動的に検出します。',
-      cardDescUpgradeOneClick: '「今すぐ更新」をクリックすると Termy ターミナルでこのコマンドが実行されます。コピーして手動で実行することもできます。',
+      cardDescUpgradeOneClick: '「今すぐ更新」をクリックすると Scoria ターミナルでこのコマンドが実行されます。コピーして手動で実行することもできます。',
       buttonCopy: 'コピー',
       buttonClose: '閉じる',
       buttonOpenDocs: 'インストールドキュメントを開く',

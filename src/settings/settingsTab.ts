@@ -9,7 +9,7 @@ import type TerminalPlugin from '../main';
 import { TerminalSettingsRenderer } from './renderers/terminalSettingsRenderer';
 import type { RendererContext } from './types';
 import { t } from '../i18n';
-import { createTermyLogoSvg } from '../ui/icons';
+import { SCORIA_ICON_ID } from '../ui/icons';
 
 /**
  * Terminal settings tab class
@@ -62,9 +62,8 @@ export class TerminalSettingTab extends PluginSettingTab {
     // Left side: logo + title + changelog button
     const titleGroup = titleRow.createDiv({ cls: 'settings-title-group' });
     
-    // Add the Termy logo
     const iconContainer = titleGroup.createDiv({ cls: 'settings-title-icon' });
-    iconContainer.appendChild(createTermyLogoSvg(32));
+    setIcon(iconContainer, SCORIA_ICON_ID);
 
     titleGroup.createDiv({ cls: 'settings-title', text: t('settings.header.title') });
 
@@ -85,12 +84,7 @@ export class TerminalSettingTab extends PluginSettingTab {
     feedbackContainer.appendText(t('settings.header.feedbackText'));
     feedbackContainer.createEl('a', {
       text: t('settings.header.feedbackLink'),
-      href: 'https://github.com/ZyphrZero/Termy'
-    });
-    feedbackContainer.createSpan({ cls: 'settings-feedback-separator', text: ' · ' });
-    feedbackContainer.createEl('a', {
-      text: t('settings.header.communityLink'),
-      href: 'https://t.me/+t6oRqhaw8c1jNzE1'
+      href: 'https://github.com/VaibhavAher100/scoria'
     });
   }
 }

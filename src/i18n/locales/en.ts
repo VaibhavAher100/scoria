@@ -20,11 +20,11 @@ export const en: TranslationKeys = {
   },
 
   plugin: {
-    name: 'Termy',
-    loadingMessage: 'Termy plugin loading',
-    loadedMessage: 'Termy plugin loaded',
-    unloadingMessage: 'Termy plugin unloading',
-    unloadedMessage: 'Termy plugin unloaded',
+    name: 'Scoria',
+    loadingMessage: 'Scoria plugin loading',
+    loadedMessage: 'Scoria plugin loaded',
+    unloadingMessage: 'Scoria plugin unloading',
+    unloadedMessage: 'Scoria plugin unloaded',
   },
 
   terminal: {
@@ -71,7 +71,7 @@ export const en: TranslationKeys = {
     openTerminal: 'Open terminal',
     openTerminalCurrentFolder: 'Open terminal in current file folder',
     openTerminalHere: 'Open terminal here',
-    showChangelog: 'Termy: show changelog',
+    showChangelog: 'Scoria: show changelog',
     terminalSearch: 'Terminal: search',
     terminalClear: 'Terminal: clear screen',
     terminalCopy: 'Terminal: copy',
@@ -174,7 +174,7 @@ export const en: TranslationKeys = {
       advanced: 'Advanced',
     },
     header: {
-      title: 'Termy',
+      title: 'Scoria',
       feedbackText: 'Thanks for using! Feedback welcome: ',
       feedbackLink: 'GitHub',
       communityLink: 'Telegram',
@@ -342,7 +342,7 @@ export const en: TranslationKeys = {
   modals: {
     changelog: {
       title: 'Changelog',
-      subtitle: 'Updated in Termy {{version}}',
+      subtitle: 'Updated in Scoria {{version}}',
       loading: 'Loading changelog...',
       unavailable: 'Unable to load the changelog for this version right now.',
       openRelease: 'Open release page',
@@ -359,7 +359,7 @@ export const en: TranslationKeys = {
     launcherInstall: {
       titleNotInstalled: '{{name}} is not installed',
       titleUpdate: 'Update {{name}}',
-      descriptionNotInstalled: 'Termy could not find "{{command}}" on your PATH. Install the CLI on your machine, then come back and try again.',
+      descriptionNotInstalled: 'Scoria could not find "{{command}}" on your PATH. Install the CLI on your machine, then come back and try again.',
       descriptionUpdate: 'A newer release of {{name}} is available ({{local}} → {{latest}}). Run the command below in your system terminal to upgrade.',
       detectedCommand: 'Detected command',
       versionLabel: 'Version',
