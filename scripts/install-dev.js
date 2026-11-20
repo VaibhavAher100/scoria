@@ -39,10 +39,10 @@ const RESET_CONFIG = args.includes('--reset');
 // Get vault path from first non-flag argument
 const VAULT_PATH = args.find(arg => !arg.startsWith('-')) || null;
 
-// Termy server configuration
+// Scoria server configuration
 const SERVER_CONFIG = {
   name: 'scoria-server',
-  displayName: 'Termy Server'
+  displayName: 'Scoria Server'
 };
 
 // Color output
@@ -128,7 +128,7 @@ function killObsidian() {
   return didKill;
 }
 
-function getWindowsTermyImageNames() {
+function getWindowsScoriaImageNames() {
   return [
     'scoria-server-win32-x64.exe',
     'scoria-server-win32-arm64.exe',
@@ -136,13 +136,13 @@ function getWindowsTermyImageNames() {
   ];
 }
 
-// Kill all Termy server processes that may lock plugin binaries during install
-function killTermyProcesses() {
+// Kill all Scoria server processes that may lock plugin binaries during install
+function killScoriaProcesses() {
   const platform = getPlatform();
   let killedAny = false;
 
   if (platform === 'windows') {
-    for (const imageName of getWindowsTermyImageNames()) {
+    for (const imageName of getWindowsScoriaImageNames()) {
       killedAny = execIgnore(`taskkill /F /T /IM ${imageName} 2>nul`) || killedAny;
     }
   } else if (platform === 'macos') {
@@ -261,7 +261,7 @@ async function copyFileWithRetry(srcPath, destPath, maxRetries = 3, onBusy = nul
 }
 
 async function main() {
-  log('\n[Termy] Development Install\n', 'cyan');
+  log('\n[Scoria] Development Install\n', 'cyan');
 
   // Reset config
   if (RESET_CONFIG) {
@@ -383,7 +383,7 @@ async function main() {
     await sleep(1000);
     log('');
   } else {
-    // Mark this directory as being installed into so any running Termy
+    // Mark this directory as being installed into so any running Scoria
     // server stops auto-reconnecting while files are being replaced.
     // The plugin itself will not auto-reload; the user must reload manually.
     writeDevInstallRequest(targetDir);
@@ -392,13 +392,13 @@ async function main() {
     });
   }
 
-  log('Stopping Termy processes...', 'cyan');
-  const stoppedTermy = killTermyProcesses();
+  log('Stopping Scoria processes...', 'cyan');
+  const stoppedScoria = killScoriaProcesses();
   log(
-    stoppedTermy ? '  Stopped running Termy processes' : '  No running Termy processes found',
-    stoppedTermy ? 'green' : 'yellow'
+    stoppedScoria ? '  Stopped running Scoria processes' : '  No running Scoria processes found',
+    stoppedScoria ? 'green' : 'yellow'
   );
-  if (stoppedTermy) {
+  if (stoppedScoria) {
     await sleep(500);
   }
   log('');
@@ -422,9 +422,9 @@ async function main() {
   const srcBinary = path.join(ROOT_DIR, 'binaries', binaryName);
   const destBinary = path.join(binariesDir, binaryName);
   await copyFileWithRetry(srcBinary, destBinary, 3, async () => {
-    const killedBusyProcesses = killTermyProcesses();
+    const killedBusyProcesses = killScoriaProcesses();
     if (killedBusyProcesses) {
-      log('  Retrying after stopping Termy processes holding the binary lock', 'yellow');
+      log('  Retrying after stopping Scoria processes holding the binary lock', 'yellow');
       await sleep(500);
     }
   });
@@ -445,8 +445,8 @@ async function main() {
   if (!KILL_OBSIDIAN) {
     log('Next steps:', 'cyan');
     log('  1. Open Obsidian if it is not already running', 'yellow');
-    log('  2. Reload the "Termy" plugin from Obsidian settings to pick up the new build', 'yellow');
-    log('  3. Ctrl+P → "Termy" to open\n', 'yellow');
+    log('  2. Reload the "Scoria" plugin from Obsidian settings to pick up the new build', 'yellow');
+    log('  3. Ctrl+P → "Scoria" to open\n', 'yellow');
   }
 
   log('Tip: Ctrl+Shift+I for developer console\n', 'gray');

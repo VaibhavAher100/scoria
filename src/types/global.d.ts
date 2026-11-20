@@ -1,7 +1,7 @@
 /**
  * Global type augmentations.
  *
- * Termy reaches a small set of Electron-provided Node modules at
+ * Scoria reaches a small set of Electron-provided Node modules at
  * runtime through Electron's renderer-side `window.require`
  * (`fs`, `path`, `child_process`, `crypto`, `http`, `https`, `url`).
  * That keeps Node module access out of the static ES-module import

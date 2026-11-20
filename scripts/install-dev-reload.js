@@ -3,12 +3,12 @@
  *
  * The sentinel is a vault-local marker (`.scoria-dev-reload.json`) written into
  * the installed plugin directory while `pnpm install:dev` is replacing files.
- * A running Termy instance reads it from `ServerManager` to suppress
+ * A running Scoria instance reads it from `ServerManager` to suppress
  * WebSocket auto-reconnect and server auto-restart for the duration of the
  * install, so the freshly written native binary is not held open by an
  * orphaned reconnect loop.
  *
- * The plugin never silently disables/enables itself — the user reloads Termy
+ * The plugin never silently disables/enables itself — the user reloads Scoria
  * manually after `pnpm install:dev` finishes.
  */
 

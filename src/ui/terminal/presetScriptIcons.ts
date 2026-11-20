@@ -244,7 +244,7 @@ function createOpenCodeSvg(variant: keyof typeof OPENCODE_ICON_PATHS): SVGSVGEle
 
 function createGeminiSvg(): SVGSVGElement {
   geminiIconCounter += 1;
-  const idPrefix = `termy-preset-gemini-${geminiIconCounter}`;
+  const idPrefix = `scoria-preset-gemini-${geminiIconCounter}`;
   const markup = geminiSvgMarkup
     .replace(/\bmaskme\b/g, `${idPrefix}-mask`)
     .replace(/\bprefix__/g, `${idPrefix}-`);

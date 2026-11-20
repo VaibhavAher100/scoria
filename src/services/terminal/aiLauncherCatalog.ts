@@ -5,7 +5,7 @@
  * status bar menu can group them and surface readiness state. The catalog
  * is purely metadata — actual execution still goes through {@link runPresetScript}.
  *
- * Termy currently only ships "coding agent" launchers (Claude Code, Codex,
+ * Scoria currently only ships "coding agent" launchers (Claude Code, Codex,
  * OpenCode). The category type is left as a discriminated union with one
  * arm so it stays explicit at every render site — adding a new product
  * category in the future means widening this type and revisiting every
@@ -37,7 +37,7 @@ export interface PartitionedLaunchers<TScript extends { id: string }> {
 }
 
 /**
- * Where Termy looks up the CLI's latest version. The lookup itself is opt-in
+ * Where Scoria looks up the CLI's latest version. The lookup itself is opt-in
  * and only runs when the user enables `checkAiLauncherUpdates` in settings,
  * because the request goes outbound to npm/GitHub — the README and
  * `AGENTS.md` document this explicitly so the contractual "no extra
@@ -61,7 +61,7 @@ export interface AiLauncherCatalogEntry {
   installDocsUrl?: string;
   /**
    * One-liner install commands the user can copy from the install modal.
-   * Termy never executes these — the user has to paste them into a shell
+   * Scoria never executes these — the user has to paste them into a shell
    * themselves, which keeps us on the right side of Obsidian's "no
    * plugin-driven updates of native dependencies" policy.
    *
@@ -72,12 +72,12 @@ export interface AiLauncherCatalogEntry {
   installCommands?: Partial<Record<NodeJS.Platform, string>>;
   /**
    * One-liner upgrade commands shown when an update is available. Unlike
-   * {@link installCommands} these are intended to be run by Termy itself
+   * {@link installCommands} these are intended to be run by Scoria itself
    * inside a user-visible terminal session — the user clicks "Update now"
-   * in the install modal and Termy types the command into a fresh
+   * in the install modal and Scoria types the command into a fresh
    * terminal. The upgrade still executes in the user's own shell, so the
    * Obsidian developer policy (no plugin-driven updates) is satisfied:
-   * Termy is automating a step the user could type by hand, with full
+   * Scoria is automating a step the user could type by hand, with full
    * visibility into the output.
    *
    * Leave a platform out if no single command can upgrade the launcher
@@ -95,7 +95,7 @@ export interface AiLauncherCatalogEntry {
 /**
  * Static catalog. Adding a new built-in launcher means appending an entry here.
  *
- * Termy currently only ships first-party coding agent launchers. When a new
+ * Scoria currently only ships first-party coding agent launchers. When a new
  * product category is introduced, add a new arm to {@link AiLauncherCategory}
  * and update every render site (TypeScript will fail the build until you do).
  */

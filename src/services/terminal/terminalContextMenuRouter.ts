@@ -2,7 +2,7 @@
  * Right-click routing for the terminal pane.
  *
  * Some TUIs — notably Claude Code — treat the right mouse button as
- * "paste from clipboard". Termy historically intercepts every contextmenu
+ * "paste from clipboard". Scoria historically intercepts every contextmenu
  * event to show its own menu, which steals that gesture. This module owns
  * the small policy that decides what should happen for a given right-click.
  */
@@ -21,11 +21,11 @@ export interface TerminalContextMenuContext {
 
 /**
  * Possible outcomes for a right-click on the terminal surface:
- * - `'menu'`     : show Termy's context menu (the historical default).
- * - `'suppress'` : do not show Termy's menu and do not paste either. The
+ * - `'menu'`     : show Scoria's context menu (the historical default).
+ * - `'suppress'` : do not show Scoria's menu and do not paste either. The
  *                  expected caller is a TUI like Claude Code that already
  *                  handles right-click on its own through xterm.js's mouse
- *                  tracking mode; Termy just steps out of the way so the
+ *                  tracking mode; Scoria just steps out of the way so the
  *                  TUI's gesture is not duplicated by a DOM-level paste.
  */
 export type TerminalContextMenuAction = 'menu' | 'suppress';
@@ -39,7 +39,7 @@ export type TerminalContextMenuAction = 'menu' | 'suppress';
  *   xterm.js does not forward shift-modified clicks to the TUI when mouse
  *   tracking is on, so this does not collide with Claude Code's own paste.
  * - Otherwise, an active Claude Code session yields right-click to the TUI;
- *   every other shell keeps Termy's menu.
+ *   every other shell keeps Scoria's menu.
  */
 export function resolveTerminalContextMenuAction(
   context: TerminalContextMenuContext,

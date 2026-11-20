@@ -277,7 +277,7 @@
 }
 
 /* ==================== Changelog Modal Styles ==================== */
-.termy-changelog-modal .modal {
+.scoria-changelog-modal .modal {
   width: min(900px, calc(100vw - 48px));
   max-width: 900px;
   max-height: min(80vh, 900px);
@@ -285,7 +285,7 @@
   overflow: hidden;
 }
 
-.termy-changelog-shell {
+.scoria-changelog-shell {
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -299,7 +299,7 @@
     var(--background-primary);
 }
 
-.termy-changelog-header {
+.scoria-changelog-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -314,27 +314,27 @@
     );
 }
 
-.termy-changelog-heading {
+.scoria-changelog-heading {
   display: flex;
   flex-direction: column;
   gap: 6px;
   min-width: 0;
 }
 
-.termy-changelog-subtitle {
+.scoria-changelog-subtitle {
   color: var(--text-muted);
   font-size: 13px;
   line-height: 1.5;
 }
 
-.termy-changelog-actions {
+.scoria-changelog-actions {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
 }
 
-.termy-changelog-version-badge {
+.scoria-changelog-version-badge {
   display: inline-flex;
   align-items: center;
   height: 28px;
@@ -348,18 +348,18 @@
   letter-spacing: 0.04em;
 }
 
-.termy-changelog-action {
+.scoria-changelog-action {
   width: 30px;
   height: 30px;
 }
 
-.termy-changelog-body {
+.scoria-changelog-body {
   overflow-y: auto;
   padding: 22px 24px 26px;
 }
 
-.termy-changelog-loading,
-.termy-changelog-error {
+.scoria-changelog-loading,
+.scoria-changelog-error {
   padding: 22px 18px;
   border: 1px solid var(--background-modifier-border);
   border-radius: 12px;
@@ -369,27 +369,27 @@
   line-height: 1.6;
 }
 
-.termy-changelog-error {
+.scoria-changelog-error {
   color: var(--text-error);
 }
 
-.termy-changelog-markdown {
+.scoria-changelog-markdown {
   line-height: 1.7;
 }
 
-.termy-changelog-markdown > :first-child {
+.scoria-changelog-markdown > :first-child {
   margin-top: 0;
 }
 
-.termy-changelog-markdown h3 {
+.scoria-changelog-markdown h3 {
   margin-top: 24px;
 }
 
-.termy-changelog-markdown ul {
+.scoria-changelog-markdown ul {
   margin-block: 10px 18px;
 }
 
-.termy-changelog-markdown li {
+.scoria-changelog-markdown li {
   margin-block: 6px;
 }
 
@@ -2118,13 +2118,13 @@
 }
 
 /* Launcher install modal — content layout */
-.termy-launcher-install-modal .termy-launcher-install-desc {
+.scoria-launcher-install-modal .scoria-launcher-install-desc {
   margin: 0 0 12px;
   line-height: 1.5;
   color: var(--text-normal);
 }
 
-.termy-launcher-install-modal .termy-launcher-install-detail {
+.scoria-launcher-install-modal .scoria-launcher-install-detail {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -2134,7 +2134,7 @@
   background: var(--background-secondary);
 }
 
-.termy-launcher-install-modal .termy-launcher-install-detail-label {
+.scoria-launcher-install-modal .scoria-launcher-install-detail-label {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -2142,14 +2142,14 @@
   color: var(--text-muted);
 }
 
-.termy-launcher-install-modal .termy-launcher-install-detail-command {
+.scoria-launcher-install-modal .scoria-launcher-install-detail-command {
   font-family: var(--font-monospace);
   font-size: 13px;
   color: var(--text-normal);
 }
 
 /* Install command card — copy-paste friendly install one-liner. */
-.termy-launcher-install-modal .termy-launcher-install-card {
+.scoria-launcher-install-modal .scoria-launcher-install-card {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -2160,26 +2160,26 @@
   background: var(--background-secondary);
 }
 
-.termy-launcher-install-modal .termy-launcher-install-card-title {
+.scoria-launcher-install-modal .scoria-launcher-install-card-title {
   font-weight: 600;
   font-size: 13px;
   color: var(--text-normal);
 }
 
-.termy-launcher-install-modal .termy-launcher-install-card-desc {
+.scoria-launcher-install-modal .scoria-launcher-install-card-desc {
   margin: 0;
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-muted);
 }
 
-.termy-launcher-install-modal .termy-launcher-install-command-row {
+.scoria-launcher-install-modal .scoria-launcher-install-command-row {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.termy-launcher-install-modal .termy-launcher-install-command {
+.scoria-launcher-install-modal .scoria-launcher-install-command {
   flex: 1 1 auto;
   min-width: 0;
   padding: 8px 10px;
@@ -2192,7 +2192,7 @@
   white-space: pre-wrap;
 }
 
-.termy-launcher-install-modal .termy-launcher-install-command-copy {
+.scoria-launcher-install-modal .scoria-launcher-install-command-copy {
   flex: 0 0 auto;
   padding: 6px 12px;
   border-radius: 6px;
@@ -2203,7 +2203,7 @@
   cursor: pointer;
 }
 
-.termy-launcher-install-modal .termy-launcher-install-command-copy:hover {
+.scoria-launcher-install-modal .scoria-launcher-install-command-copy:hover {
   background: var(--background-modifier-hover);
 }
 

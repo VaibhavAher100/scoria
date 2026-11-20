@@ -21,32 +21,32 @@ export class ChangelogModal extends Modal {
 
   onOpen(): void {
     const { contentEl, modalEl } = this;
-    modalEl.addClass('termy-changelog-modal');
+    modalEl.addClass('scoria-changelog-modal');
     contentEl.empty();
     this.markdownComponent.load();
 
-    const shellEl = contentEl.createDiv({ cls: 'termy-changelog-shell' });
-    const headerEl = shellEl.createDiv({ cls: 'termy-changelog-header' });
-    const headingEl = headerEl.createDiv({ cls: 'termy-changelog-heading' });
+    const shellEl = contentEl.createDiv({ cls: 'scoria-changelog-shell' });
+    const headerEl = shellEl.createDiv({ cls: 'scoria-changelog-header' });
+    const headingEl = headerEl.createDiv({ cls: 'scoria-changelog-heading' });
 
     headingEl.createDiv({
       cls: 'modal-title-text',
       text: t('modals.changelog.title'),
     });
     this.subtitleEl = headingEl.createDiv({
-      cls: 'termy-changelog-subtitle',
+      cls: 'scoria-changelog-subtitle',
       text: t('modals.changelog.subtitle', { version: this.requestedVersion }),
     });
 
-    const actionsEl = headerEl.createDiv({ cls: 'termy-changelog-actions' });
+    const actionsEl = headerEl.createDiv({ cls: 'scoria-changelog-actions' });
     this.versionBadgeEl = actionsEl.createDiv({
-      cls: 'termy-changelog-version-badge',
+      cls: 'scoria-changelog-version-badge',
       text: this.requestedVersion,
     });
 
-    this.markdownContainer = shellEl.createDiv({ cls: 'termy-changelog-body' });
+    this.markdownContainer = shellEl.createDiv({ cls: 'scoria-changelog-body' });
     this.markdownContainer.createDiv({
-      cls: 'termy-changelog-loading',
+      cls: 'scoria-changelog-loading',
       text: t('modals.changelog.loading'),
     });
 
@@ -70,7 +70,7 @@ export class ChangelogModal extends Modal {
 
       this.markdownContainer.empty();
       const markdownEl = this.markdownContainer.createDiv({
-        cls: 'markdown-rendered termy-changelog-markdown',
+        cls: 'markdown-rendered scoria-changelog-markdown',
       });
 
       await MarkdownRenderer.render(
@@ -84,7 +84,7 @@ export class ChangelogModal extends Modal {
       errorLog('[ChangelogModal] Failed to render changelog:', error);
       this.markdownContainer.empty();
       this.markdownContainer.createDiv({
-        cls: 'termy-changelog-error',
+        cls: 'scoria-changelog-error',
         text: t('modals.changelog.unavailable'),
       });
     }
@@ -92,7 +92,7 @@ export class ChangelogModal extends Modal {
 
   private renderHeaderActions(actionsEl: HTMLElement, releaseUrl: string | null, fullChangelogUrl: string): void {
     if (releaseUrl) {
-      const releaseBtn = actionsEl.createEl('button', { cls: 'clickable-icon termy-changelog-action' });
+      const releaseBtn = actionsEl.createEl('button', { cls: 'clickable-icon scoria-changelog-action' });
       releaseBtn.setAttribute('type', 'button');
       releaseBtn.setAttribute('aria-label', t('modals.changelog.openRelease'));
       setIcon(releaseBtn, 'rocket');
@@ -101,7 +101,7 @@ export class ChangelogModal extends Modal {
       });
     }
 
-    const fullBtn = actionsEl.createEl('button', { cls: 'clickable-icon termy-changelog-action' });
+    const fullBtn = actionsEl.createEl('button', { cls: 'clickable-icon scoria-changelog-action' });
     fullBtn.setAttribute('type', 'button');
     fullBtn.setAttribute('aria-label', t('modals.changelog.openFull'));
     setIcon(fullBtn, 'external-link');

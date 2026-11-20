@@ -1,5 +1,5 @@
 /**
- * Termy Server Build Script
+ * Scoria Server Build Script
  * Auto-detect current platform and build the scoria server binary
  * Binary naming: scoria-server-{platform}-{arch}
  */
@@ -42,10 +42,10 @@ const PLATFORMS = {
   },
 };
 
-// Termy server configuration
+// Scoria server configuration
 const SERVER_CONFIG = {
   name: 'scoria-server',
-  displayName: 'Termy Server',
+  displayName: 'Scoria Server',
   binaryPrefix: 'scoria-server'
 };
 

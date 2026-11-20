@@ -28,7 +28,11 @@ Significant changes made in this fork (from 2026-06-14 onward):
 
   - Changed server-binary distribution to fetch only from this project's own
     GitHub release host (removing the third-party binary host), with build
-    provenance attestation.
+    provenance attestation and SHA-256 hashes pinned in the plugin bundle.
+
+  - Renamed the product from Termy to Scoria (plugin id, server binary,
+    transport and file names, interface text, icon). Termy's history stays in
+    CHANGELOG.md and in the git history.
 
   - Added a terminal "[[" wiki-link autocomplete. The UI/state class in
     src/services/terminal/wikilinkAutocomplete.ts is adapted from

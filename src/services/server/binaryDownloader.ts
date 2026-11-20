@@ -127,7 +127,7 @@ export class BinaryDownloader {
   /**
    * Get the installed binary version.
    *
-   * Termy reads the version from a JSON cache file written next to the
+   * Scoria reads the version from a JSON cache file written next to the
    * native binary at install time (`<plugin>/binaries/.scoria-server.version.json`).
    * The cache stores the binary's size + mtime alongside the version
    * string, so an out-of-band binary swap invalidates the cache and we
