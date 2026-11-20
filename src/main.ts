@@ -43,6 +43,7 @@ import {
 } from './services/terminal/commandAvailability';
 import { clearCommandVersionCache, probeCommandVersion } from './services/terminal/commandVersionProbe';
 import { clearLatestVersionCache, fetchLatestVersion } from './services/terminal/latestVersionRegistry';
+import { shouldKeepSessionsOnUnload } from './services/terminal/unloadPolicy';
 import {
   buildAiLauncherStatusSnapshot,
   readinessToBadge,
@@ -221,6 +222,15 @@ export default class TerminalPlugin extends Plugin {
       }
     );
 
+    // Defect D1: Obsidian runs registered cleanups in LIFO order and before
+    // onunload(). The registerView cleanup above swaps every terminal leaf to a
+    // placeholder view, which closes the TerminalViews. This cleanup is
+    // registered after it, so it runs first and tells the service that the view
+    // closes come from an unload, not from the user.
+    this.register(() => {
+      this._terminalService?.beginPluginUnload(this.keepSessionsOnUnload());
+    });
+
     // Register all commands
     this.registerCommands();
 
@@ -260,15 +270,30 @@ export default class TerminalPlugin extends Plugin {
     void this.handleUnload();
   }
 
+  /**
+   * Whether this unload keeps the daemon and its sessions (defect D1).
+   * Obsidian sets the private `_userDisabled` only for a Settings disable;
+   * see unloadPolicy.ts for the fallback when the field is absent.
+   */
+  private keepSessionsOnUnload(): boolean {
+    const userDisabled = (this as unknown as { _userDisabled?: unknown })._userDisabled;
+    // Log the raw type so a rename of the private field shows in the debug log.
+    debugLog(`[TerminalPlugin] _userDisabled: ${typeof userDisabled} ${String(userDisabled)}`);
+    return shouldKeepSessionsOnUnload(
+      this.settings?.serverConnection?.keepServerAliveOnUnload ?? true,
+      userDisabled,
+    );
+  }
+
   private async handleUnload(): Promise<void> {
     debugLog(t('plugin.unloadingMessage'));
 
-    // Reload survival (M2 Part B): unless the user opted into kill-on-unload,
-    // leave the daemon + sessions running so a reload re-discovers and reattaches.
-    // Obsidian cannot tell a reload from a disable, so we default to keep-alive;
-    // an abandoned daemon self-cleans via the orphan timeout, and the "Stop
+    // Reload survival (M2 Part B): keep the daemon + sessions running so a
+    // reload or update re-discovers and reattaches them. Stop them when the
+    // user turned the plugin off in Settings, or opted into kill-on-unload.
+    // An abandoned daemon self-cleans via the orphan timeout, and the "Stop
     // terminal server" command stops it explicitly.
-    const keepAlive = this.settings?.serverConnection?.keepServerAliveOnUnload ?? true;
+    const keepAlive = this.keepSessionsOnUnload();
 
     // Stop any in-flight launcher upgrade watchdogs so their poll
     // timers do not outlive the plugin lifecycle.
