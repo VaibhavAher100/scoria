@@ -192,7 +192,9 @@ export class ClaudeCodeIdeBridge {
 
     this.fs.mkdirSync(this.claudeIdeDir, { recursive: true });
 
-    this.server = new WebSocketServer({ port: 0 });
+    // Loopback only: the bridge exposes the editor selection and must never
+    // be reachable from the network.
+    this.server = new WebSocketServer({ host: '127.0.0.1', port: 0 });
     this.server.on('connection', (socket, request) => {
       this.handleConnection(socket, request.headers['x-claude-code-ide-authorization']);
     });
@@ -390,12 +392,24 @@ export class ClaudeCodeIdeBridge {
       authToken: this.authToken,
     };
 
-    this.fs.writeFileSync(this.lockfilePath!, JSON.stringify(lockfile), 'utf8');
+    // Owner-only file mode (honoured on macOS/Linux): the lockfile holds the token.
+    this.fs.writeFileSync(this.lockfilePath!, JSON.stringify(lockfile), { encoding: 'utf8', mode: 0o600 });
+    // `mode` applies only on create; tighten a pre-existing file too.
+    this.fs.chmodSync(this.lockfilePath!, 0o600);
+  }
+
+  private isValidToken(token: string | undefined): boolean {
+    if (typeof token !== 'string') {
+      return false;
+    }
+    const expected = Buffer.from(this.authToken, 'utf8');
+    const actual = Buffer.from(token, 'utf8');
+    return actual.length === expected.length && this.crypto.timingSafeEqual(actual, expected);
   }
 
   private handleConnection(socket: WebSocket, authHeader: string | string[] | undefined): void {
     const token = Array.isArray(authHeader) ? authHeader[0] : authHeader;
-    if (token !== this.authToken) {
+    if (!this.isValidToken(token)) {
       socket.close(1008, 'Unauthorized');
       return;
     }
