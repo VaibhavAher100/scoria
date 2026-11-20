@@ -3,7 +3,7 @@
  *
  * Usage:
  *   node scripts/release-notes.js --version 1.3.0
- *   node scripts/release-notes.js --version 1.3.0 --repository ZyphrZero/Termy --output release-body.md
+ *   node scripts/release-notes.js --version 1.3.0 --repository VaibhavAher100/scoria --output release-body.md
  */
 
 import fs from 'fs';
@@ -13,7 +13,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DEFAULT_CHANGELOG_PATH = path.join(__dirname, '..', 'CHANGELOG.md');
-const DEFAULT_REPOSITORY = 'ZyphrZero/Termy';
+const DEFAULT_REPOSITORY = 'VaibhavAher100/scoria';
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -73,8 +73,8 @@ export function renderReleaseBody({ version, changelogSection, repository = DEFA
     '',
     '### Obsidian Community Plugins (Recommended)',
     '1. Open **Settings → Community plugins** and turn off **Restricted mode** if it is enabled',
-    '2. Click **Browse**, search for `Termy`, and click **Install**',
-    '3. Click **Enable** to start using Termy',
+    '2. Click **Browse**, search for `Scoria`, and click **Install**',
+    '3. Click **Enable** to start using Scoria',
     '',
     '### BRAT (Early Updates)',
     'Use BRAT if you want to track the latest tagged build before it ships to the community directory.',
@@ -104,12 +104,11 @@ export function renderReleaseBody({ version, changelogSection, repository = DEFA
     '',
     '## Full Changelog',
     '',
-    `See [CHANGELOG.md](${repoUrl}/blob/master/CHANGELOG.md) for the complete history.`,
+    `See [CHANGELOG.md](${repoUrl}/blob/main/CHANGELOG.md) for the complete history.`,
     '',
     '## Support',
     '',
     `- [Report Issues](${repoUrl}/issues)`,
-    '- [Telegram Group](https://t.me/+t6oRqhaw8c1jNzE1)',
   ].join('\n');
 }
 

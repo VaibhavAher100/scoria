@@ -193,7 +193,6 @@ export interface TranslationKeys {
       title: string;
       feedbackText: string;
       feedbackLink: string;
-      communityLink: string;
       changelog: string;
     };
   };
@@ -345,7 +344,6 @@ export interface TranslationKeys {
       binaryDownloadSource: string;
       binaryDownloadSourceDesc: string;
       binaryDownloadSourceGithubRelease: string;
-      binaryDownloadSourceCloudflareR2: string;
       binaryDownloadNow: string;
       binaryDownloadNowDesc: string;
       binaryDownloadNowRunning: string;

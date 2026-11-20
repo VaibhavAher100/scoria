@@ -15,10 +15,10 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Termy server configuration
+// Scoria server configuration
 const SERVER_CONFIG = {
   name: 'scoria-server',
-  displayName: 'Termy Server'
+  displayName: 'Scoria Server'
 };
 
 // Parse command line arguments

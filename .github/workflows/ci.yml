@@ -7,16 +7,12 @@ on:
       - 'docs/**'
       - 'assets/**'
       - 'README.md'
-      - 'README_ZH.md'
-      - 'CHANGELOG.md'
   pull_request:
     branches: [main, develop]
     paths-ignore:
       - 'docs/**'
       - 'assets/**'
       - 'README.md'
-      - 'README_ZH.md'
-      - 'CHANGELOG.md'
   workflow_dispatch:
 
 permissions:

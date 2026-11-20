@@ -5,7 +5,7 @@
  *
  * The modal:
  *
- *   1. Tells the user which command was probed and where Termy looked.
+ *   1. Tells the user which command was probed and where Scoria looked.
  *   2. Surfaces the local + latest versions when known, including a clear
  *      "X → Y" hint when an update is available.
  *   3. Provides the upstream's recommended one-liner install command for
@@ -13,7 +13,7 @@
  *   4. Lets the user open the official docs or attempt the launcher anyway.
  *
  * It deliberately does NOT execute the install command itself. The user has
- * to paste it into a shell themselves. This keeps Termy on the right side
+ * to paste it into a shell themselves. This keeps Scoria on the right side
  * of Obsidian's "no plugin-driven updates of native dependencies" policy.
  */
 
@@ -54,13 +54,13 @@ export interface LauncherInstallModalOptions {
   onRunAnyway?: () => void;
   /**
    * Invoked when the user clicks "Update now". Implementations should
-   * spawn a Termy terminal and run the upgrade command in it. Only
+   * spawn a Scoria terminal and run the upgrade command in it. Only
    * provided when an upgrade command exists for the current platform.
    */
   onRunUpgrade?: () => void;
   /**
    * Invoked when the user clicks "Install now". Implementations should
-   * spawn a Termy terminal and run the install command in it. Only
+   * spawn a Scoria terminal and run the install command in it. Only
    * provided when an install command exists for the current platform
    * AND the launcher is currently missing — otherwise we keep the
    * primary CTA focused on the upgrade or the docs link.
@@ -78,7 +78,7 @@ export class LauncherInstallModal extends Modal {
 
   onOpen(): void {
     const { contentEl, modalEl } = this;
-    modalEl.addClass('termy-launcher-install-modal');
+    modalEl.addClass('scoria-launcher-install-modal');
     contentEl.empty();
 
     const titleEl = contentEl.createDiv({ cls: 'modal-title' });
@@ -89,7 +89,7 @@ export class LauncherInstallModal extends Modal {
         : t('modals.launcherInstall.titleNotInstalled', { name: this.options.name }),
     });
 
-    const descEl = contentEl.createEl('p', { cls: 'termy-launcher-install-desc' });
+    const descEl = contentEl.createEl('p', { cls: 'scoria-launcher-install-desc' });
     descEl.setText(this.buildDescription());
 
     if (this.options.updateAvailable) {
@@ -97,13 +97,13 @@ export class LauncherInstallModal extends Modal {
     } else if (this.options.command) {
       // Fall back to the detected-command hint when the launcher is missing
       // entirely. We surface the version row separately when known.
-      const detail = contentEl.createDiv({ cls: 'termy-launcher-install-detail' });
+      const detail = contentEl.createDiv({ cls: 'scoria-launcher-install-detail' });
       detail.createDiv({
-        cls: 'termy-launcher-install-detail-label',
+        cls: 'scoria-launcher-install-detail-label',
         text: t('modals.launcherInstall.detectedCommand'),
       });
       detail.createEl('code', {
-        cls: 'termy-launcher-install-detail-command',
+        cls: 'scoria-launcher-install-detail-command',
         text: this.options.command,
       });
     }
@@ -123,7 +123,7 @@ export class LauncherInstallModal extends Modal {
 
     if (this.options.updateAvailable && this.options.onRunUpgrade && this.options.upgradeCommand) {
       // Primary CTA when an upgrade is on offer: run the upgrade command
-      // in a fresh Termy terminal. Stays beside the docs link so users
+      // in a fresh Scoria terminal. Stays beside the docs link so users
       // who prefer to inspect the change first can still do so.
       const updateBtn = buttonContainer.createEl('button', {
         cls: 'mod-cta',
@@ -135,7 +135,7 @@ export class LauncherInstallModal extends Modal {
       });
     } else if (this.options.onRunInstall && this.options.installCommand) {
       // Primary CTA for the not-installed state: run the upstream's
-      // install command in a fresh Termy terminal. Symmetric with
+      // install command in a fresh Scoria terminal. Symmetric with
       // "Update now", and avoids the previous footgun where Run anyway
       // would just spawn the missing launcher binary itself.
       const installBtn = buttonContainer.createEl('button', {
@@ -206,15 +206,15 @@ export class LauncherInstallModal extends Modal {
   }
 
   private renderVersionDelta(contentEl: HTMLElement): void {
-    const detail = contentEl.createDiv({ cls: 'termy-launcher-install-detail' });
+    const detail = contentEl.createDiv({ cls: 'scoria-launcher-install-detail' });
     detail.createDiv({
-      cls: 'termy-launcher-install-detail-label',
+      cls: 'scoria-launcher-install-detail-label',
       text: t('modals.launcherInstall.versionLabel'),
     });
     const local = this.options.localVersion ?? '?';
     const latest = this.options.latestVersion ?? '?';
     detail.createEl('code', {
-      cls: 'termy-launcher-install-detail-command',
+      cls: 'scoria-launcher-install-detail-command',
       text: `${local} → ${latest}`,
     });
   }
@@ -226,9 +226,9 @@ export class LauncherInstallModal extends Modal {
    */
   private renderInstallCommand(contentEl: HTMLElement, command: string): void {
     const showingUpgrade = this.options.updateAvailable === true && this.options.upgradeCommand === command;
-    const card = contentEl.createDiv({ cls: 'termy-launcher-install-card' });
+    const card = contentEl.createDiv({ cls: 'scoria-launcher-install-card' });
     card.createDiv({
-      cls: 'termy-launcher-install-card-title',
+      cls: 'scoria-launcher-install-card-title',
       text: showingUpgrade
         ? t('modals.launcherInstall.cardTitleUpgradeOneClick')
         : this.options.updateAvailable
@@ -236,7 +236,7 @@ export class LauncherInstallModal extends Modal {
           : t('modals.launcherInstall.cardTitleInstall'),
     });
     card.createEl('p', {
-      cls: 'termy-launcher-install-card-desc',
+      cls: 'scoria-launcher-install-card-desc',
       text: showingUpgrade
         ? t('modals.launcherInstall.cardDescUpgradeOneClick')
         : this.options.updateAvailable
@@ -244,14 +244,14 @@ export class LauncherInstallModal extends Modal {
           : t('modals.launcherInstall.cardDescInstall'),
     });
 
-    const commandRow = card.createDiv({ cls: 'termy-launcher-install-command-row' });
+    const commandRow = card.createDiv({ cls: 'scoria-launcher-install-command-row' });
     const commandEl = commandRow.createEl('code', {
-      cls: 'termy-launcher-install-command',
+      cls: 'scoria-launcher-install-command',
       text: command,
     });
 
     const copyBtn = commandRow.createEl('button', {
-      cls: 'termy-launcher-install-command-copy',
+      cls: 'scoria-launcher-install-command-copy',
       text: t('modals.launcherInstall.buttonCopy'),
     });
     copyBtn.addEventListener('click', () => {

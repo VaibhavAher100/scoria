@@ -10,7 +10,7 @@ import {
   XTVERSION_RESPONSE,
 } from './claudeCodeTuiSupport.ts';
 
-test('buildClaudeCodeTuiEnv declares Termy as an xterm.js host for Claude Code', () => {
+test('buildClaudeCodeTuiEnv declares Scoria as an xterm.js host for Claude Code', () => {
   const env = buildClaudeCodeTuiEnv({});
 
   assert.equal(env.TERM, 'xterm-256color');

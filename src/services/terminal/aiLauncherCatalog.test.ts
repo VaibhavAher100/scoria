@@ -60,7 +60,7 @@ test('partitionLaunchers handles an empty input gracefully', () => {
 });
 
 test('AI_LAUNCHER_CATALOG only contains coding agent entries today', () => {
-  // Termy ships first-party coding agent launchers only. Adding a new
+  // Scoria ships first-party coding agent launchers only. Adding a new
   // product category requires widening AiLauncherCategory and updating
   // every render site, so the explicit assertion is intentional.
   const codingAgentIds = AI_LAUNCHER_CATALOG
@@ -102,7 +102,7 @@ test('getInstallCommandForPlatform falls back to null for unsupported platforms'
   const entry = getAiLauncherEntry('claude-code');
   assert.ok(entry);
   // freebsd is a valid NodeJS.Platform but no install command is documented
-  // for it. Termy's modal then falls back to its docs link.
+  // for it. Scoria's modal then falls back to its docs link.
   assert.equal(getInstallCommandForPlatform(entry, 'freebsd'), null);
 });
 

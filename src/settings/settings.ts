@@ -125,7 +125,7 @@ export interface TerminalSettings {
   // built-in launcher; experienced users can flip this to declutter their menu.
   hideUnavailableAiLaunchers: boolean;
 
-  // When true, Termy queries the npm registry / GitHub Releases API to find
+  // When true, Scoria queries the npm registry / GitHub Releases API to find
   // out whether a newer version of each AI launcher CLI is available.
   // Default false because it introduces outbound traffic that the README
   // and AGENTS.md disclose only when the user opts in.

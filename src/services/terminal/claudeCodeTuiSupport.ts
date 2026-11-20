@@ -8,7 +8,7 @@ export type ClaudeCodeExtendedKeyboardMode = 'none' | 'modifyOtherKeys';
 
 /**
  * Claude Code has a first-class xterm.js path keyed by TERM_PROGRAM=vscode.
- * Termy embeds xterm.js directly, so declare that capability through the
+ * Scoria embeds xterm.js directly, so declare that capability through the
  * terminal session environment instead of inheriting Obsidian's host shell.
  */
 export function buildClaudeCodeTuiEnv(

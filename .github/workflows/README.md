@@ -23,7 +23,7 @@
 - 手动触发
 
 **功能:**
-- 构建 5 个平台的 `termy-server` 二进制
+- 构建 5 个平台的 `scoria-server` 二进制
 - 测试二进制启动和端口输出
 - 使用 `Swatinem/rust-cache` 做 Rust 缓存
 
@@ -41,23 +41,23 @@
 - 构建所有平台二进制 + SHA256 校验和
 - 构建 TypeScript 插件
 - 上传二进制到 Cloudflare R2
-- 打包为带版本号的 `termy-<version>.zip`
+- 打包为带版本号的 `scoria-<version>.zip`
 - 从 `CHANGELOG.md` 自动提取当前 tag 对应的发布说明
 - 创建 GitHub Release
 
 **产物结构:**
 ```
-termy-<version>.zip
-└── termy/
+scoria-<version>.zip
+└── scoria/
     ├── main.js
     ├── manifest.json
     ├── styles.css
     └── binaries/
-        ├── termy-server-win32-x64.exe
-        ├── termy-server-darwin-arm64
-        ├── termy-server-darwin-x64
-        ├── termy-server-linux-x64
-        └── termy-server-linux-arm64
+        ├── scoria-server-win32-x64.exe
+        ├── scoria-server-darwin-arm64
+        ├── scoria-server-darwin-x64
+        ├── scoria-server-linux-x64
+        └── scoria-server-linux-arm64
 ```
 
 **发布说明来源:**
@@ -65,7 +65,7 @@ termy-<version>.zip
 - 如果找不到对应章节，Release 会失败，避免发布说明缺失或错配
 
 **二进制分发:**
-- `release.yml` 从源码构建各平台 `termy-server`，连同 `.sha256` 一起作为 GitHub Release 资源发布
+- `release.yml` 从源码构建各平台 `scoria-server`，连同 `.sha256` 一起作为 GitHub Release 资源发布
 - 插件只从本仓库的 GitHub Release 下载二进制（不再使用第三方 R2 主机）
 
 ## 使用

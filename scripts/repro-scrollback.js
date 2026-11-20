@@ -17,7 +17,7 @@
  *            xterm.js-style behavior against terminals that scroll on ED2.
  *   sync-ed3 Emit DEC 2026 + ED3 after filling scrollback. This intentionally
  *            purges scrollback in most terminals and is mainly useful for
- *            verifying Termy's compatibility filter.
+ *            verifying Scoria's compatibility filter.
  */
 
 const ESC = '\x1b';

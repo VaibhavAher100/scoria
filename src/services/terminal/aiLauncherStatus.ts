@@ -1,7 +1,7 @@
 /**
  * Combined readiness + version state for an AI launcher row.
  *
- * Termy renders four interesting cases in the status bar menu and the
+ * Scoria renders four interesting cases in the status bar menu and the
  * install modal:
  *
  *   - 'unknown'          probe still in flight or failed for non-deterministic

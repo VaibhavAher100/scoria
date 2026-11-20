@@ -2,7 +2,7 @@
  * Pure helpers for extracting the current working directory from
  * shell-prompt echoes in PTY output.
  *
- * The implementation is intentionally regex-based because Termy
+ * The implementation is intentionally regex-based because Scoria
  * supports a long tail of shells (cmd, PowerShell, Git Bash, WSL bash,
  * zsh under WSL, etc.) and the cleanest signal we get from PTY chunks
  * is the prompt itself. Each parser:

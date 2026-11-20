@@ -1218,14 +1218,14 @@ export class TerminalInstance {
         event: e,
       });
 
-      // Either way Termy stops the host (browser / Obsidian) from also
+      // Either way Scoria stops the host (browser / Obsidian) from also
       // popping its own context menu on this gesture.
       e.preventDefault();
       e.stopPropagation();
 
       if (action === 'suppress') {
         // Claude Code's TUI already handles right-click as paste through
-        // xterm.js mouse tracking. Termy must not also paste here, otherwise
+        // xterm.js mouse tracking. Scoria must not also paste here, otherwise
         // the clipboard contents land in the terminal twice.
         return;
       }
@@ -2261,7 +2261,7 @@ export class TerminalInstance {
   /**
    * Open the specified path in the OS file manager.
    *
-   * Termy invokes this only with directory paths (from `getCwd()`),
+   * Scoria invokes this only with directory paths (from `getCwd()`),
    * so Electron's `shell.openPath` is enough on every platform — it
    * defers to Explorer / Finder / xdg-open and removes the need to
    * spawn a child process or build a shell command string.
