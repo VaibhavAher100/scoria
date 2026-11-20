@@ -28,17 +28,23 @@ concurrency:
 
 jobs:
   plugin:
-    name: Build and test plugin
-    runs-on: ubuntu-latest
+    name: Plugin (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
-      - uses: pnpm/action-setup@v5
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
+        with:
+          version: 10.33.4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -49,8 +55,33 @@ jobs:
       - name: Build plugin
         run: pnpm build
 
-      - name: Run terminal tests
-        run: pnpm test:terminal
+      - name: Run all TypeScript tests
+        run: pnpm test:ts
 
       - name: Run script tests
-        run: node --test scripts/upload-r2-assets.test.js
+        run: pnpm test:scripts
+
+      - name: Lint
+        if: matrix.os == 'ubuntu-latest'
+        run: pnpm lint
+
+  rust:
+    name: Rust server tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: rust-servers -> target
+
+      - name: Run cargo test
+        run: cargo test --locked --manifest-path rust-servers/Cargo.toml
