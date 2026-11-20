@@ -20,11 +20,11 @@ export const ko: TranslationKeys = {
   },
 
   plugin: {
-    name: 'Termy',
-    loadingMessage: 'Termy 플러그인 로딩 중',
-    loadedMessage: 'Termy 플러그인을 로드했습니다',
-    unloadingMessage: 'Termy 플러그인 언로드 중',
-    unloadedMessage: 'Termy 플러그인 언로드 완료',
+    name: 'Scoria',
+    loadingMessage: 'Scoria 플러그인 로딩 중',
+    loadedMessage: 'Scoria 플러그인을 로드했습니다',
+    unloadingMessage: 'Scoria 플러그인 언로드 중',
+    unloadedMessage: 'Scoria 플러그인 언로드 완료',
   },
 
   terminal: {
@@ -68,10 +68,10 @@ export const ko: TranslationKeys = {
   },
 
   commands: {
-    openTerminal: 'Termy 터미널 열기',
+    openTerminal: 'Scoria 터미널 열기',
     openTerminalCurrentFolder: '현재 파일 폴더에서 터미널 열기',
     openTerminalHere: '여기에서 터미널 열기',
-    showChangelog: 'Termy: 변경 로그 보기',
+    showChangelog: 'Scoria: 변경 로그 보기',
     terminalSearch: '터미널: 검색',
     terminalClear: '터미널: 화면 지우기',
     terminalCopy: '터미널: 복사',
@@ -93,7 +93,7 @@ export const ko: TranslationKeys = {
   },
 
   ribbon: {
-    terminalTooltip: 'Termy 터미널 열기',
+    terminalTooltip: 'Scoria 터미널 열기',
   },
 
   visibility: {
@@ -174,7 +174,7 @@ export const ko: TranslationKeys = {
       advanced: '고급',
     },
     header: {
-      title: 'Termy',
+      title: 'Scoria',
       feedbackText: '사용해 주셔서 감사합니다! 피드백: ',
       feedbackLink: 'GitHub',
       communityLink: 'Telegram',
@@ -325,7 +325,7 @@ export const ko: TranslationKeys = {
       offlineMode: '오프라인 모드',
       offlineModeDesc: '활성화 시 바이너리 버전 확인과 자동 다운로드를 건너뜀',
       binaryDownloadSource: '바이너리 다운로드 소스',
-      binaryDownloadSourceDesc: 'Termy 네이티브 바이너리를 GitHub Release 또는 Cloudflare R2 중 어디에서 다운로드할지 선택합니다',
+      binaryDownloadSourceDesc: 'Scoria 네이티브 바이너리를 GitHub Release 또는 Cloudflare R2 중 어디에서 다운로드할지 선택합니다',
       binaryDownloadSourceGithubRelease: 'GitHub Release',
       binaryDownloadSourceCloudflareR2: 'Cloudflare R2',
       binaryDownloadNow: '지금 바이너리 다운로드',
@@ -342,7 +342,7 @@ export const ko: TranslationKeys = {
   modals: {
     changelog: {
       title: '변경 로그',
-      subtitle: 'Termy {{version}} 업데이트 내용',
+      subtitle: 'Scoria {{version}} 업데이트 내용',
       loading: '변경 로그를 불러오는 중...',
       unavailable: '이 버전의 변경 로그를 지금 불러올 수 없습니다.',
       openRelease: '릴리스 페이지 열기',
@@ -359,7 +359,7 @@ export const ko: TranslationKeys = {
     launcherInstall: {
       titleNotInstalled: '{{name}}이(가) 설치되지 않았습니다',
       titleUpdate: '{{name}} 업데이트',
-      descriptionNotInstalled: 'Termy가 PATH에서 "{{command}}"을(를) 찾을 수 없습니다. CLI를 설치한 후 다시 시도하세요.',
+      descriptionNotInstalled: 'Scoria가 PATH에서 "{{command}}"을(를) 찾을 수 없습니다. CLI를 설치한 후 다시 시도하세요.',
       descriptionUpdate: '{{name}}의 새 릴리스를 사용할 수 있습니다 ({{local}} → {{latest}}). 시스템 터미널에서 아래 명령을 실행하여 업그레이드하세요.',
       detectedCommand: '감지된 명령',
       versionLabel: '버전',
@@ -368,7 +368,7 @@ export const ko: TranslationKeys = {
       cardTitleUpgradeOneClick: '한 번의 클릭으로 업그레이드',
       cardDescInstall: '이 명령을 복사하여 시스템 터미널에서 실행하세요. 셸에서 실행 파일에 도달할 수 있게 되면 이 런처가 자동으로 인식합니다.',
       cardDescUpgrade: '이 명령을 복사하여 시스템 터미널에서 실행하여 업그레이드하세요. 새 버전이 셸에서 도달 가능해지면 이 런처가 자동으로 인식합니다.',
-      cardDescUpgradeOneClick: '"지금 업데이트"를 클릭하면 Termy 터미널에서 이 명령이 실행됩니다. 복사하여 직접 실행할 수도 있습니다.',
+      cardDescUpgradeOneClick: '"지금 업데이트"를 클릭하면 Scoria 터미널에서 이 명령이 실행됩니다. 복사하여 직접 실행할 수도 있습니다.',
       buttonCopy: '복사',
       buttonClose: '닫기',
       buttonOpenDocs: '설치 문서 열기',

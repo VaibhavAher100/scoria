@@ -2,7 +2,7 @@
   "name": "scoria",
   "version": "1.4.1",
   "type": "module",
-  "description": "Terminal emulator with split panes, reusable workflows, AI CLI context handoff, and zero setup. Powered by xterm.js and a bundled Rust PTY backend.",
+  "description": "Terminal for Obsidian. Shells keep running across a reload, the daemon talks over an OS-protected pipe or socket, and [[note]] links work in the terminal. Built on xterm.js and a Rust PTY daemon.",
   "main": "main.js",
   "packageManager": "pnpm@10.33.4",
   "scripts": {
@@ -33,7 +33,7 @@
     "xterm",
     "pty"
   ],
-  "author": "ZyphrZero",
+  "author": "Vaibhav Aher",
   "license": "GPL-3.0",
   "devDependencies": {
     "@eslint/js": "^9.39.4",

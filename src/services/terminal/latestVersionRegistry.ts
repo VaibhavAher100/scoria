@@ -2,7 +2,7 @@
  * Look up the *latest published* version of an AI launcher CLI from its
  * upstream registry (npm or GitHub Releases).
  *
- * Termy treats this as an *opt-in* feature gated by the
+ * Scoria treats this as an *opt-in* feature gated by the
  * `checkAiLauncherUpdates` setting. Without that opt-in we do NOT touch
  * the network — the README's "no extra outbound traffic by default"
  * promise is preserved. When the user opts in, the README is updated to
@@ -103,7 +103,7 @@ async function fetchNpmLatest(packageName: string): Promise<LatestVersionLookupR
   const url = new URL(`https://registry.npmjs.org/${encodeURIComponent(packageName)}`);
   const json = await fetchJson(url, {
     Accept: 'application/json',
-    'User-Agent': 'termy-obsidian-plugin',
+    'User-Agent': 'scoria-obsidian-plugin',
   });
   if (!json) {
     return { version: null, error: 'Registry request failed or timed out' };
@@ -122,7 +122,7 @@ async function fetchGithubReleaseLatest(repo: string): Promise<LatestVersionLook
   const url = new URL(`https://api.github.com/repos/${repo}/releases/latest`);
   const json = await fetchJson(url, {
     Accept: 'application/vnd.github+json',
-    'User-Agent': 'termy-obsidian-plugin',
+    'User-Agent': 'scoria-obsidian-plugin',
   });
   if (!json) {
     return { version: null, error: 'GitHub releases request failed or timed out' };

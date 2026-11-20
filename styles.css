@@ -30,6 +30,7 @@
 }
 
 .settings-title-icon {
+  --icon-size: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1064,6 +1065,11 @@
   font-weight: 500;
 }
 
+.terminal-status-bar-icon {
+  display: inline-flex;
+  --icon-size: 16px;
+}
+
 .preset-scripts-menu {
   position: fixed;
   display: flex;
@@ -1265,7 +1271,7 @@
   display: none;
 }
 
-.termy-always-on-top-tab-badge {
+.scoria-always-on-top-tab-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1278,13 +1284,13 @@
   transform: translateY(-1px);
 }
 
-.termy-always-on-top-tab-badge svg {
+.scoria-always-on-top-tab-badge svg {
   width: 11px;
   height: 11px;
   stroke-width: 2.1;
 }
 
-.workspace-tab-header.is-active .termy-always-on-top-tab-badge {
+.workspace-tab-header.is-active .scoria-always-on-top-tab-badge {
   color: var(--interactive-accent);
   opacity: 1;
 }

@@ -3,7 +3,7 @@
 name = "scoria-server"
 version = "1.0.0"
 edition = "2021"
-description = "Terminal server for Termy plugin"
+description = "Terminal server for Scoria plugin"
 
 [[bin]]
 name = "scoria-server"

@@ -1,5 +1,5 @@
 import type { Menu, TAbstractFile, View, WorkspaceLeaf } from 'obsidian';
-import { addIcon, FileSystemAdapter, Modal, Notice, Plugin, TFolder, normalizePath, setIcon, setTooltip } from 'obsidian';
+import { FileSystemAdapter, Modal, Notice, Plugin, TFolder, normalizePath, setIcon, setTooltip } from 'obsidian';
 import {
   DEFAULT_PRESET_SCRIPTS,
   DEFAULT_TERMINAL_SETTINGS,
@@ -19,7 +19,7 @@ import { TERMINAL_VIEW_TYPE, TerminalView } from './ui/terminal/terminalView';
 import { ChangelogModal } from './ui/changelog/changelogModal';
 import { i18n, t } from './i18n';
 import { debugLog, errorLog } from './utils/logger';
-import { createTermyLogoSvg, createTermyLogoSvgMarkup, TERMY_RIBBON_ICON_ID } from './ui/icons';
+import { SCORIA_ICON_ID } from './ui/icons';
 import { shell } from 'electron';
 import type { TerminalInstance } from './services/terminal/terminalInstance';
 import {
@@ -55,10 +55,10 @@ import embeddedChangelogContent from '../CHANGELOG.md';
 
 // Import terminal styles
 
-const REPOSITORY_URL = 'https://github.com/ZyphrZero/Termy';
-const CHANGELOG_URL = `${REPOSITORY_URL}/blob/master/CHANGELOG.md`;
+const REPOSITORY_URL = 'https://github.com/VaibhavAher100/scoria';
+const CHANGELOG_URL = `${REPOSITORY_URL}/blob/main/CHANGELOG.md`;
 const EMBEDDED_CHANGELOG_SOURCE_PATH = 'CHANGELOG.md';
-const ALWAYS_ON_TOP_TAB_BADGE_CLASS = 'termy-always-on-top-tab-badge';
+const ALWAYS_ON_TOP_TAB_BADGE_CLASS = 'scoria-always-on-top-tab-badge';
 
 type ChangelogDetails = {
   requestedVersion: string;
@@ -207,8 +207,6 @@ export default class TerminalPlugin extends Plugin {
     // Set debug mode
     const { setDebugMode } = await import('./utils/logger');
     setDebugMode(this.settings.enableDebugLog);
-
-    this.registerCustomIcons();
 
     // Set up the ribbon icon and dependent UI from visibility settings
     this.updateFeatureVisibility();
@@ -524,10 +522,6 @@ export default class TerminalPlugin extends Plugin {
     };
   }
 
-  private registerCustomIcons(): void {
-    addIcon(TERMY_RIBBON_ICON_ID, createTermyLogoSvgMarkup());
-  }
-
   /**
    * Update feature visibility
    * Called after settings change
@@ -536,7 +530,7 @@ export default class TerminalPlugin extends Plugin {
     const v = this.settings.visibility;
     const showRibbon = v.enabled && v.showInRibbon;
     if (showRibbon && !this._ribbonIcon) {
-      this._ribbonIcon = this.addRibbonIcon(TERMY_RIBBON_ICON_ID, t('ribbon.terminalTooltip'), () => {
+      this._ribbonIcon = this.addRibbonIcon(SCORIA_ICON_ID, t('ribbon.terminalTooltip'), () => {
         void this.activateTerminalView();
       });
     } else if (!showRibbon && this._ribbonIcon) {
@@ -564,11 +558,12 @@ export default class TerminalPlugin extends Plugin {
     this._statusBarItem.setAttr('aria-label', t('ribbon.terminalTooltip'));
 
     // Create the SVG icon and label
-    const iconEl = createTermyLogoSvg(18);
+    const iconEl = activeDocument.createElement('span');
+    setIcon(iconEl, SCORIA_ICON_ID);
     iconEl.addClass('terminal-status-bar-icon');
     const labelEl = activeDocument.createElement('span');
     labelEl.addClass('terminal-status-bar-label');
-    labelEl.textContent = 'Termy';
+    labelEl.textContent = 'Scoria';
     this._statusBarItem.append(iconEl, labelEl);
     
     // Add click handler
@@ -1058,7 +1053,7 @@ export default class TerminalPlugin extends Plugin {
         menu.addItem((item) => {
           item
             .setTitle(t('commands.openTerminalHere'))
-            .setIcon(TERMY_RIBBON_ICON_ID)
+            .setIcon(SCORIA_ICON_ID)
             .onClick(() => {
               void this.openTerminalInFolder(this.folderPathOf(file));
             });
@@ -2336,7 +2331,7 @@ export default class TerminalPlugin extends Plugin {
   }
 
   /**
-   * Render the readiness badge for the Termy AI menu row. The badge starts
+   * Render the readiness badge for the Scoria AI menu row. The badge starts
    * from the cached resolver state and refreshes asynchronously.
    */
   private createLauncherStatusBadge(status: AiLauncherStatus): HTMLElement {
@@ -2427,10 +2422,10 @@ export default class TerminalPlugin extends Plugin {
   }
 
   /**
-   * Run a catalog-supplied install or upgrade command in a fresh Termy
+   * Run a catalog-supplied install or upgrade command in a fresh Scoria
    * terminal. The user clicked "Install now" or "Update now" from the
    * install modal, so we already have explicit consent to execute —
-   * Termy types the command into a new terminal session and presses
+   * Scoria types the command into a new terminal session and presses
    * Enter, exactly as if the user had typed it themselves.
    *
    * Because the command runs in a user-visible PTY we cannot wait on
@@ -2484,7 +2479,7 @@ export default class TerminalPlugin extends Plugin {
 
   /**
    * Poll the local version probe after an upgrade command has been
-   * dispatched into a Termy terminal. Stops on:
+   * dispatched into a Scoria terminal. Stops on:
    *
    *   - the snapshot leaves `update-available` (success — local caught
    *     up with latest, or the user was already on latest before
@@ -2843,7 +2838,7 @@ export default class TerminalPlugin extends Plugin {
       return;
     }
 
-    if (this.isTermyTerminalContextCommand(normalizedCommandId) && !this.getActiveTerminalView()) {
+    if (this.isScoriaTerminalContextCommand(normalizedCommandId) && !this.getActiveTerminalView()) {
       void this.activateTerminalView();
     }
 
@@ -2861,7 +2856,7 @@ export default class TerminalPlugin extends Plugin {
     }
   }
 
-  private isTermyTerminalContextCommand(commandId: string): boolean {
+  private isScoriaTerminalContextCommand(commandId: string): boolean {
     const prefix = `${this.manifest.id}:terminal-`;
     return commandId.startsWith(prefix);
   }

@@ -22,10 +22,10 @@ type UrlModule = typeof import("url");
 
 import {
   buildAgentContextTerminalEnv,
-  renderTermyCodexSkill,
+  renderScoriaCodexSkill,
   serializeAgentContextSnapshotState,
-  TERMY_CODEX_SKILL_MANAGED_MARKER,
-  TERMY_CODEX_SKILL_RELATIVE_PATH,
+  SCORIA_CODEX_SKILL_MANAGED_MARKER,
+  SCORIA_CODEX_SKILL_RELATIVE_PATH,
 } from "./agentContext";
 import { debugLog, errorLog } from "@/utils/logger";
 
@@ -66,7 +66,7 @@ type OpenFileContext = FileContext & {
 
 type AgentContextSnapshot = {
   schemaVersion: 1;
-  source: "termy";
+  source: "scoria";
   updatedAt: string;
   vaultRoot: string | null;
   workspaceFolders: string[];
@@ -202,16 +202,16 @@ export class AgentContextBridge {
 
       const skillFilePath = this.path.join(
         vaultRoot,
-        TERMY_CODEX_SKILL_RELATIVE_PATH,
+        SCORIA_CODEX_SKILL_RELATIVE_PATH,
       );
-      const skillContent = renderTermyCodexSkill();
+      const skillContent = renderScoriaCodexSkill();
 
       if (this.fs.existsSync(skillFilePath)) {
         const currentContent = this.fs.readFileSync(skillFilePath, "utf8");
         if (currentContent === skillContent) {
           return;
         }
-        if (!currentContent.includes(TERMY_CODEX_SKILL_MANAGED_MARKER)) {
+        if (!currentContent.includes(SCORIA_CODEX_SKILL_MANAGED_MARKER)) {
           debugLog(
             `[AgentContextBridge] Existing unmanaged Codex skill found at ${skillFilePath}; leaving it unchanged`,
           );
@@ -262,7 +262,7 @@ export class AgentContextBridge {
 
     return {
       schemaVersion: 1,
-      source: "termy",
+      source: "scoria",
       updatedAt: new Date().toISOString(),
       vaultRoot,
       workspaceFolders: vaultRoot ? [vaultRoot] : [],
