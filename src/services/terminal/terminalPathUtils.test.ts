@@ -7,6 +7,8 @@ import {
   findUniqueTerminalEntryByBasename,
   getVaultRelativePathFromAbsolute,
   isAbsoluteTerminalPath,
+  isExternallyOpenableFile,
+  isNetworkTerminalPath,
   joinTerminalPaths,
   normalizeDroppedEntryPath,
   normalizeDroppedEntryReference,
@@ -15,7 +17,85 @@ import {
   normalizeTerminalToken,
   normalizeVaultPath,
   obsidianUriToVaultPath,
+  quoteShellArgument,
+  scanWikilinkRanges,
+  shellQuoteStyleFor,
+  stripShellControlChars,
+  terminalStringIndexToBufferColumn,
 } from './terminalPathUtils.ts';
+
+test('quoteShellArgument: quotes plain paths for each shell', () => {
+  assert.equal(quoteShellArgument('notes/a b.md', 'posix'), `'notes/a b.md'`);
+  assert.equal(quoteShellArgument('C:\\v\\a b (1).md', 'powershell'), `'C:\\v\\a b (1).md'`);
+  assert.equal(quoteShellArgument('C:\\v\\a b.md', 'cmd'), `"C:\\v\\a b.md"`);
+  assert.equal(quoteShellArgument('日本語ノート.md', 'posix'), `'日本語ノート.md'`);
+});
+
+test('quoteShellArgument: refuses characters any supported shell interprets', () => {
+  for (const style of ['posix', 'powershell', 'cmd'] as const) {
+    assert.equal(quoteShellArgument('$(rm -rf ~).md', style), null);
+    assert.equal(quoteShellArgument("it's.md", style), null);
+    assert.equal(quoteShellArgument('a;b.md', style), null);
+    assert.equal(quoteShellArgument('a`b`.md', style), null);
+    assert.equal(quoteShellArgument('a&calc.md', style), null);
+    assert.equal(quoteShellArgument('a|b.md', style), null);
+    assert.equal(quoteShellArgument('%PATH%.md', style), null);
+    assert.equal(quoteShellArgument('a!b.md', style), null);
+    assert.equal(quoteShellArgument('it\u2019s.md', style), null);
+    assert.equal(quoteShellArgument('a\uff02b.md', style), null);
+    assert.equal(quoteShellArgument('a\u00a5b.md', style), null);
+    assert.equal(quoteShellArgument('a\u202eb.md', style), null);
+  }
+});
+
+test('quoteShellArgument: refuses a leading dash (option injection)', () => {
+  assert.equal(quoteShellArgument('-rf.md', 'posix'), null);
+});
+
+test('quoteShellArgument: refuses empty values and control characters', () => {
+  assert.equal(quoteShellArgument('', 'posix'), null);
+  assert.equal(quoteShellArgument('a\rb.md', 'posix'), null);
+  assert.equal(quoteShellArgument('a\nb.md', 'powershell'), null);
+  assert.equal(quoteShellArgument('a\u001b[2Jb.md', 'cmd'), null);
+});
+
+test('shellQuoteStyleFor maps known shells and refuses custom shells', () => {
+  assert.equal(shellQuoteStyleFor('bash'), 'posix');
+  assert.equal(shellQuoteStyleFor('gitbash'), 'posix');
+  assert.equal(shellQuoteStyleFor('pwsh'), 'powershell');
+  assert.equal(shellQuoteStyleFor('cmd'), 'cmd');
+  assert.equal(shellQuoteStyleFor('custom'), null);
+});
+
+test('isExternallyOpenableFile allows passive documents only', () => {
+  assert.equal(isExternallyOpenableFile('C:\\Users\\me\\report.PDF'), true);
+  assert.equal(isExternallyOpenableFile('/home/me/photo.png'), true);
+  assert.equal(isExternallyOpenableFile('C:\\tmp\\setup.exe'), false);
+  assert.equal(isExternallyOpenableFile('C:\\tmp\\run.bat'), false);
+  assert.equal(isExternallyOpenableFile('C:\\tmp\\link.lnk'), false);
+  assert.equal(isExternallyOpenableFile('C:\\tmp\\page.hta'), false);
+  assert.equal(isExternallyOpenableFile('C:\\tmp\\script.py'), false);
+  assert.equal(isExternallyOpenableFile('C:\\tmp\\a.exe.'), false);
+  assert.equal(isExternallyOpenableFile('C:\\tmp\\a.pdf '), false);
+  assert.equal(isExternallyOpenableFile('C:\\tmp\\noext'), false);
+  assert.equal(isExternallyOpenableFile('/home/me/.bashrc'), false);
+  assert.equal(isExternallyOpenableFile('C:\\tmp\\invoice.docx'), false);
+  assert.equal(isExternallyOpenableFile('C:\\tmp\\doc.rtf'), false);
+  assert.equal(isExternallyOpenableFile('C:\\tmp\\data.xml'), false);
+  assert.equal(isExternallyOpenableFile('C:\\tmp\\sheet.csv'), false);
+});
+
+test('isNetworkTerminalPath detects UNC and device paths', () => {
+  assert.equal(isNetworkTerminalPath('\\\\host\\share\\x.pdf'), true);
+  assert.equal(isNetworkTerminalPath('//host/share/x.pdf'), true);
+  assert.equal(isNetworkTerminalPath('\\\\?\\UNC\\host\\share'), true);
+  assert.equal(isNetworkTerminalPath('C:\\Users\\me\\x.pdf'), false);
+  assert.equal(isNetworkTerminalPath('/home/me/x.pdf'), false);
+});
+
+test('stripShellControlChars removes CR, LF, ESC and DEL', () => {
+  assert.equal(stripShellControlChars('a\r\nb\u001b\u007fc'), 'abc');
+});
 
 test('normalizeTerminalToken strips wrappers and decodes escaped drag payload text', () => {
   assert.equal(
@@ -23,6 +103,73 @@ test('normalizeTerminalToken strips wrappers and decodes escaped drag payload te
     'file:///C:/Program Files/Termy'
   );
   assert.equal(normalizeTerminalToken('"[[Folder/File.md]]"'), '[[Folder/File.md]]');
+});
+
+test('scanWikilinkRanges finds links and strips alias/heading/block from the target', () => {
+  assert.deepEqual(scanWikilinkRanges('see [[Note]] now'), [
+    { startIndex: 4, endIndex: 12, linkpath: 'Note' },
+  ]);
+
+  const aliased = scanWikilinkRanges('[[Folder/Note|Display]]');
+  assert.equal(aliased.length, 1);
+  assert.equal(aliased[0].linkpath, 'Folder/Note');
+  assert.equal(aliased[0].startIndex, 0);
+  assert.equal(aliased[0].endIndex, 23);
+
+  assert.equal(scanWikilinkRanges('[[Note#Heading]]')[0].linkpath, 'Note');
+  assert.equal(scanWikilinkRanges('[[Note^block]]')[0].linkpath, 'Note');
+});
+
+test('scanWikilinkRanges handles multiple links and ignores incomplete/empty ones', () => {
+  const multi = scanWikilinkRanges('[[A]] and [[B]]');
+  assert.deepEqual(multi.map((r) => r.linkpath), ['A', 'B']);
+  assert.equal(multi[1].startIndex, 10);
+
+  assert.deepEqual(scanWikilinkRanges('no links here'), []);
+  assert.deepEqual(scanWikilinkRanges('[[]] empty'), []);
+  assert.deepEqual(scanWikilinkRanges('[[unterminated'), []);
+});
+
+test('terminalStringIndexToBufferColumn maps UTF-16 indexes onto wide terminal cells', () => {
+  const makeCell = (chars: string, width: number) => ({
+    getChars: () => chars,
+    getWidth: () => width,
+  });
+  const cells = [
+    makeCell('你', 2),
+    makeCell('', 0),
+    makeCell(' ', 1),
+    ...Array.from('[[N]]', (char) => makeCell(char, 1)),
+  ];
+  const range = scanWikilinkRanges('你 [[N]]')[0];
+
+  assert.equal(
+    terminalStringIndexToBufferColumn(range.startIndex, cells.length, (column) => cells[column]),
+    3
+  );
+  assert.equal(
+    terminalStringIndexToBufferColumn(range.endIndex, cells.length, (column) => cells[column]),
+    8
+  );
+});
+
+test('terminalStringIndexToBufferColumn handles surrogate-pair emoji', () => {
+  const makeCell = (chars: string, width: number) => ({
+    getChars: () => chars,
+    getWidth: () => width,
+  });
+  const cells = [
+    makeCell('🙂', 2),
+    makeCell('', 0),
+    makeCell(' ', 1),
+    ...Array.from('[[N]]', (char) => makeCell(char, 1)),
+  ];
+  const range = scanWikilinkRanges('🙂 [[N]]')[0];
+
+  assert.equal(
+    terminalStringIndexToBufferColumn(range.startIndex, cells.length, (column) => cells[column]),
+    3
+  );
 });
 
 test('normalizeTerminalRawToken strips wrappers without decoding URL separators', () => {

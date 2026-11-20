@@ -3,7 +3,19 @@
  * Includes all terminal-related configuration options
  */
 
-import type { VisibilityConfig } from '@/services/visibility';
+/** Feature visibility settings (per UI surface) */
+export interface VisibilityConfig {
+  /** Whether the feature is enabled (master switch) */
+  enabled: boolean;
+  /** Whether to show in the command palette */
+  showInCommandPalette: boolean;
+  /** Whether to show an icon in the ribbon */
+  showInRibbon: boolean;
+  /** Whether to show in new tabs */
+  showInNewTab: boolean;
+  /** Whether to show in the status bar */
+  showInStatusBar: boolean;
+}
 
 /** Terminal programs that can be launched from the shell selector when installed */
 export type TerminalShellType = 'tmux';
@@ -69,6 +81,9 @@ export interface TerminalSettings {
   fontFamily: string;
   cursorStyle: 'block' | 'underline' | 'bar';
   cursorBlink: boolean;
+  copyOnSelect: boolean;       // Auto-copy selected text to the clipboard on selection
+  wikilinkAutocomplete: boolean;  // Show a [[ note picker in the terminal (opt-in)
+  wikilinkInsertMode: 'wikilink' | 'vault-path' | 'absolute-path';  // What [[ inserts
 
   // Theme settings
   useObsidianTheme: boolean;      // Whether to use Obsidian theme colors
@@ -347,6 +362,9 @@ export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   fontFamily: 'Consolas, "Courier New", monospace',
   cursorStyle: 'block',
   cursorBlink: true,
+  copyOnSelect: true,
+  wikilinkAutocomplete: false,
+  wikilinkInsertMode: 'wikilink',
   useObsidianTheme: true,
   preferredRenderer: 'canvas',
   scrollback: 1000,

@@ -69,6 +69,8 @@ export const ru: TranslationKeys = {
 
   commands: {
     openTerminal: 'Открыть терминал Termy',
+    openTerminalCurrentFolder: 'Открыть терминал в папке текущего файла',
+    openTerminalHere: 'Открыть терминал здесь',
     showChangelog: 'Termy: показать список изменений',
     terminalSearch: 'Терминал: поиск',
     terminalClear: 'Терминал: очистить экран',
@@ -253,6 +255,12 @@ export const ru: TranslationKeys = {
       cursorStyleDesc: 'Стиль курсора терминала',
       cursorBlink: 'Мигание курсора',
       cursorBlinkDesc: 'Включить мигание курсора',
+      copyOnSelect: 'Копировать при выделении',
+      copyOnSelectDesc: 'Автоматически копировать выделенный текст в буфер обмена',
+      wikilinkAutocomplete: 'Автодополнение вики-ссылок',
+      wikilinkAutocompleteDesc: 'Введите [[ в терминале, чтобы выбрать заметку хранилища (по желанию; может мешать TUI, которым нужны буквальные скобки)',
+      wikilinkInsertMode: 'Формат вставки вики-ссылки',
+      wikilinkInsertModeDesc: 'Что вставляет [[: вики-ссылку, путь относительно хранилища или абсолютный путь',
       rendererSettings: 'Настройки рендерера',
       preferredRenderer: 'Предпочтительный рендерер',
       preferredRendererDesc: 'Движок рендеринга терминала (WebGL быстрее, но возможны проблемы совместимости)',
@@ -475,6 +483,12 @@ export const ru: TranslationKeys = {
     block: 'Блок',
     underline: 'Подчёркнутый',
     bar: 'Полоса',
+  },
+
+  wikilinkInsertModeOptions: {
+    wikilink: 'Вики-ссылка ([[Заметка]])',
+    vaultPath: 'Путь хранилища (Folder/Note.md)',
+    absolutePath: 'Абсолютный путь',
   },
 
   rendererOptions: {

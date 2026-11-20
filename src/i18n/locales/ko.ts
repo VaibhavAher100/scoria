@@ -69,6 +69,8 @@ export const ko: TranslationKeys = {
 
   commands: {
     openTerminal: 'Termy 터미널 열기',
+    openTerminalCurrentFolder: '현재 파일 폴더에서 터미널 열기',
+    openTerminalHere: '여기에서 터미널 열기',
     showChangelog: 'Termy: 변경 로그 보기',
     terminalSearch: '터미널: 검색',
     terminalClear: '터미널: 화면 지우기',
@@ -253,6 +255,12 @@ export const ko: TranslationKeys = {
       cursorStyleDesc: '터미널 커서 스타일',
       cursorBlink: '커서 깜박임',
       cursorBlinkDesc: '커서 깜박임 사용',
+      copyOnSelect: '선택 시 복사',
+      copyOnSelectDesc: '선택한 텍스트를 클립보드에 자동으로 복사',
+      wikilinkAutocomplete: '위키링크 자동완성',
+      wikilinkAutocompleteDesc: '터미널에서 [[ 를 입력해 보관소 노트를 선택 (선택 사항, 리터럴 대괄호가 필요한 TUI와 충돌할 수 있음)',
+      wikilinkInsertMode: '위키링크 삽입 형식',
+      wikilinkInsertModeDesc: '[[ 가 삽입하는 내용: 위키링크, 보관소 상대 경로, 절대 경로',
       rendererSettings: '렌더러 설정',
       preferredRenderer: '선호 렌더러',
       preferredRendererDesc: '터미널 렌더링 엔진(WebGL은 빠르지만 호환성 문제가 있을 수 있음)',
@@ -475,6 +483,12 @@ export const ko: TranslationKeys = {
     block: '블록',
     underline: '밑줄',
     bar: '막대',
+  },
+
+  wikilinkInsertModeOptions: {
+    wikilink: '위키링크 ([[노트]])',
+    vaultPath: '보관소 경로 (Folder/Note.md)',
+    absolutePath: '절대 경로',
   },
 
   rendererOptions: {

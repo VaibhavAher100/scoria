@@ -29,6 +29,8 @@ import {
   getVaultRelativePathFromAbsolute,
   isBasenameOnlyTerminalToken,
   isAbsoluteTerminalPath,
+  isExternallyOpenableFile,
+  isNetworkTerminalPath,
   joinTerminalPaths,
   normalizeDroppedEntryReference,
   normalizeTerminalRawToken,
@@ -36,6 +38,8 @@ import {
   normalizeTerminalToken,
   normalizeVaultPath,
   obsidianUriToVaultPath,
+  scanWikilinkRanges,
+  terminalStringIndexToBufferColumn,
   toPlatformPath,
 } from '../../services/terminal/terminalPathUtils';
 import { TERMINAL_FILE_URI_REGEX } from '../../services/terminal/terminalFileLinks';
@@ -66,6 +70,8 @@ export class TerminalView extends ItemView {
   private searchInput: HTMLInputElement | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private fileUriLinkAddon: WebLinksAddon | null = null;
+  private obsidianUriLinkAddon: WebLinksAddon | null = null;
+  private wikilinkLinkProvider: { dispose(): void } | null = null;
   private titleChangeCleanup: (() => void) | null = null;
   private searchStateCleanup: (() => void) | null = null;
   private initPromise: Promise<TerminalInstance> | null = null;
@@ -73,6 +79,9 @@ export class TerminalView extends ItemView {
   private initReject: ((error: Error) => void) | null = null;
   /** Session id restored from view state, used to reattach across a reload (Part B). */
   private restoredSessionId: string | null = null;
+  // One-shot working directory requested at open time (e.g. "open terminal in
+  // this folder"). Consumed by the first fresh spawn; not persisted to state.
+  private requestedCwd: string | null = null;
 
   private readonly fs: FsModule;
   private readonly path: PathModule;
@@ -114,6 +123,12 @@ export class TerminalView extends ItemView {
       const sessionId = (state as { sessionId?: unknown }).sessionId;
       if (typeof sessionId === 'string' && sessionId) {
         this.restoredSessionId = sessionId;
+      }
+    }
+    if (state && typeof state === 'object' && 'cwd' in state) {
+      const cwd = (state as { cwd?: unknown }).cwd;
+      if (typeof cwd === 'string' && cwd) {
+        this.requestedCwd = cwd;
       }
     }
     await super.setState(state, result);
@@ -290,8 +305,7 @@ export class TerminalView extends ItemView {
 
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
-    this.fileUriLinkAddon?.dispose();
-    this.fileUriLinkAddon = null;
+    this.disposeTerminalLinkAddons();
     this.titleChangeCleanup?.();
     this.titleChangeCleanup = null;
     this.searchStateCleanup?.();
@@ -319,8 +333,7 @@ export class TerminalView extends ItemView {
     if (!terminal) return null;
 
     this.detachTerminalBindings();
-    this.fileUriLinkAddon?.dispose();
-    this.fileUriLinkAddon = null;
+    this.disposeTerminalLinkAddons();
     terminal.detach();
     this.terminalInstance = null;
     this.initPromise = Promise.resolve(terminal);
@@ -370,7 +383,10 @@ export class TerminalView extends ItemView {
       // and the leaf reopens) spawns fresh rather than chasing a stale id.
       const restoreSessionId = this.restoredSessionId ?? undefined;
       this.restoredSessionId = null;
-      this.terminalInstance = await this.terminalService.createTerminal(restoreSessionId);
+      // A requested cwd only applies to a fresh spawn, never a reattach.
+      const cwdOverride = restoreSessionId ? undefined : (this.requestedCwd ?? undefined);
+      this.requestedCwd = null;
+      this.terminalInstance = await this.terminalService.createTerminal(restoreSessionId, cwdOverride);
       this.initResolve?.(this.terminalInstance);
       this.initResolve = null;
       this.initReject = null;
@@ -922,7 +938,7 @@ export class TerminalView extends ItemView {
       },
     };
 
-    this.fileUriLinkAddon?.dispose();
+    this.disposeTerminalLinkAddons();
     this.fileUriLinkAddon = new WebLinksAddon((event, uri) => {
       event.preventDefault();
       void this.openTerminalHyperlinkTarget(uri);
@@ -930,12 +946,88 @@ export class TerminalView extends ItemView {
       urlRegex: TERMINAL_FILE_URI_REGEX,
     });
     xterm.loadAddon(this.fileUriLinkAddon);
+
+    // Plain-text obsidian:// URIs printed by tools become clickable too.
+    this.obsidianUriLinkAddon = new WebLinksAddon((event, uri) => {
+      event.preventDefault();
+      void this.openTerminalHyperlinkTarget(uri);
+    }, {
+      urlRegex: /obsidian:\/\/[^\s'"]+/,
+    });
+    xterm.loadAddon(this.obsidianUriLinkAddon);
+
+    // [[wiki-links]] in output open the matching vault note.
+    this.wikilinkLinkProvider = xterm.registerLinkProvider({
+      provideLinks: (bufferLineNumber, callback) => {
+        const bufferLine = xterm.buffer.active.getLine(bufferLineNumber - 1);
+        if (!bufferLine) {
+          callback(undefined);
+          return;
+        }
+        const text = bufferLine.translateToString(true);
+        const ranges = scanWikilinkRanges(text);
+        if (ranges.length === 0) {
+          callback(undefined);
+          return;
+        }
+        callback(ranges.map((range) => ({
+          text: text.slice(range.startIndex, range.endIndex),
+          range: {
+            start: {
+              x: terminalStringIndexToBufferColumn(
+                range.startIndex,
+                bufferLine.length,
+                (column) => bufferLine.getCell(column) ?? undefined
+              ) + 1,
+              y: bufferLineNumber,
+            },
+            end: {
+              x: terminalStringIndexToBufferColumn(
+                range.endIndex,
+                bufferLine.length,
+                (column) => bufferLine.getCell(column) ?? undefined
+              ),
+              y: bufferLineNumber,
+            },
+          },
+          activate: (event: MouseEvent) => {
+            event.preventDefault();
+            void this.openWikilinkTarget(range.linkpath);
+          },
+        })));
+      },
+    });
+  }
+
+  private disposeTerminalLinkAddons(): void {
+    this.fileUriLinkAddon?.dispose();
+    this.fileUriLinkAddon = null;
+    this.obsidianUriLinkAddon?.dispose();
+    this.obsidianUriLinkAddon = null;
+    this.wikilinkLinkProvider?.dispose();
+    this.wikilinkLinkProvider = null;
+  }
+
+  /** Open the vault note for a `[[link]]` or obsidian:// target. */
+  private async openWikilinkTarget(linkpath: string): Promise<void> {
+    const file = this.app.metadataCache.getFirstLinkpathDest(linkpath, '');
+    if (file) {
+      await this.openVaultFileReference(file);
+      return;
+    }
+    new Notice(t('notices.terminal.fileReferenceUnavailable'));
   }
 
   private async openTerminalHyperlinkTarget(target: string): Promise<void> {
     const filePath = fileUriToPlatformPath(target);
     if (filePath) {
       await this.openTerminalFileReference(filePath);
+      return;
+    }
+
+    const obsidianVaultPath = obsidianUriToVaultPath(target);
+    if (obsidianVaultPath) {
+      await this.openWikilinkTarget(obsidianVaultPath);
       return;
     }
 
@@ -973,24 +1065,45 @@ export class TerminalView extends ItemView {
       return;
     }
 
-    const errorMessage = await shell.openPath(resolved.externalPath);
-    if (errorMessage) {
-      if (this.fs.existsSync(resolved.externalPath)) {
-        const containingDir = this.path.dirname(resolved.externalPath);
-        const directoryError = await shell.openPath(containingDir);
-        if (!directoryError) {
-          return;
-        }
-      }
+    // Terminal output is untrusted: a click must never run a program. Decide
+    // on the real path (symlinks resolved), never on the printed name. Open
+    // passive documents, and folders except on macOS (an .app bundle is a
+    // folder); only reveal anything else.
+    let realPath: string;
+    let isDirectory: boolean;
+    try {
+      realPath = this.fs.realpathSync(resolved.externalPath);
+      isDirectory = this.fs.statSync(realPath).isDirectory();
+    } catch {
+      new Notice(t('notices.terminal.fileReferenceUnavailable'));
+      return;
+    }
+    if (isNetworkTerminalPath(realPath)) {
+      new Notice(t('notices.terminal.fileReferenceUnavailable'));
+      return;
+    }
+    const mayOpen = isDirectory ? process.platform !== 'darwin' : isExternallyOpenableFile(realPath);
+    if (!mayOpen) {
+      shell.showItemInFolder(realPath);
+      return;
+    }
 
-      errorLog('[TerminalView] Failed to open external path:', resolved.externalPath, errorMessage);
-      new Notice(t('notices.terminal.fileReferenceOpenFailed'));
+    const errorMessage = await shell.openPath(realPath);
+    if (errorMessage) {
+      // Reveal only: opening the parent folder could launch an app bundle.
+      errorLog('[TerminalView] Failed to open external path:', realPath, errorMessage);
+      shell.showItemInFolder(realPath);
     }
   }
 
   private resolveTerminalFileReference(pathLike: string): { file?: TFile; externalPath: string } | null {
     const normalizedReference = normalizeTerminalReferencePath(pathLike);
     if (!normalizedReference) {
+      return null;
+    }
+    // Never touch a network path from terminal output: even an existence
+    // check authenticates over SMB and leaks the user's NTLM hash.
+    if (isNetworkTerminalPath(normalizedReference)) {
       return null;
     }
 
@@ -1019,6 +1132,10 @@ export class TerminalView extends ItemView {
     }
 
     for (const absolutePath of this.getTerminalReferenceAbsoluteCandidates(normalizedReference)) {
+      // A relative reference joined to a UNC cwd is a network path too.
+      if (isNetworkTerminalPath(absolutePath)) {
+        continue;
+      }
       const fileFromCandidate = this.absolutePathToVaultFile(absolutePath);
       if (fileFromCandidate) {
         return {
@@ -1189,6 +1306,7 @@ export class TerminalView extends ItemView {
       fontFamily: settings.fontFamily,
       cursorStyle: settings.cursorStyle,
       cursorBlink: settings.cursorBlink,
+      copyOnSelect: settings.copyOnSelect,
       useObsidianTheme: settings.useObsidianTheme,
       backgroundColor: settings.backgroundColor,
       foregroundColor: settings.foregroundColor,

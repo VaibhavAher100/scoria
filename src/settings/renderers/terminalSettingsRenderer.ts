@@ -16,7 +16,6 @@ import {
   getCurrentPlatformCustomShellPath, 
   setCurrentPlatformCustomShellPath 
 } from '../settings';
-import { BaseSettingsRenderer } from './baseRenderer';
 import { t } from '../../i18n';
 import { PresetScriptModal } from '../../ui/terminal/presetScriptModal';
 import { renderPresetScriptIcon } from '../../ui/terminal/presetScriptIcons';
@@ -50,11 +49,13 @@ const NEW_INSTANCE_BEHAVIORS = [
 const CURSOR_STYLES = ['block', 'underline', 'bar'] as const;
 const BACKGROUND_IMAGE_SIZES = ['cover', 'contain', 'auto'] as const;
 const PREFERRED_RENDERERS = ['canvas', 'webgl'] as const;
+const WIKILINK_INSERT_MODES = ['wikilink', 'vault-path', 'absolute-path'] as const;
 
 type NewInstanceBehavior = (typeof NEW_INSTANCE_BEHAVIORS)[number];
 type CursorStyle = (typeof CURSOR_STYLES)[number];
 type BackgroundImageSize = (typeof BACKGROUND_IMAGE_SIZES)[number];
 type PreferredRenderer = (typeof PREFERRED_RENDERERS)[number];
+type WikilinkInsertMode = (typeof WIKILINK_INSERT_MODES)[number];
 
 const isNewInstanceBehavior = (value: string): value is NewInstanceBehavior =>
   NEW_INSTANCE_BEHAVIORS.includes(value as NewInstanceBehavior);
@@ -67,6 +68,9 @@ const isBackgroundImageSize = (value: string): value is BackgroundImageSize =>
 
 const isPreferredRenderer = (value: string): value is PreferredRenderer =>
   PREFERRED_RENDERERS.includes(value as PreferredRenderer);
+
+const isWikilinkInsertMode = (value: string): value is WikilinkInsertMode =>
+  WIKILINK_INSERT_MODES.includes(value as WikilinkInsertMode);
 
 type TerminalInstanceLike = {
   updateOptions: (options: { scrollback?: number }) => void;
@@ -173,7 +177,8 @@ function validateShellPath(path: string): boolean {
  * Terminal settings renderer
  * Handles rendering for Shell program, instance behavior, theme, and appearance settings
  */
-export class TerminalSettingsRenderer extends BaseSettingsRenderer {
+export class TerminalSettingsRenderer {
+  protected context!: RendererContext;
   private themePreviewEl: HTMLElement | null = null;
   private themePreviewContentEl: HTMLElement | null = null;
   private themePreviewCursorEl: HTMLElement | null = null;
@@ -202,6 +207,47 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
    * so stale buttons from a previous DOM tree don't leak.
    */
   private launcherUpdateButtons: Map<string, HTMLElement> = new Map();
+
+  /**
+   * Toggle the visibility of a conditionally rendered section.
+   * Used for partial DOM updates to avoid losing the scroll position during a full refresh.
+   */
+  protected toggleConditionalSection(
+    container: HTMLElement,
+    sectionId: string,
+    shouldShow: boolean,
+    renderFn: (container: HTMLElement) => void,
+    insertAfter?: HTMLElement
+  ): void {
+    if (!container) {
+      return;
+    }
+
+    const sectionClass = `conditional-section-${sectionId}`;
+    const existingSection = container.querySelector<HTMLElement>(`.${sectionClass}`);
+
+    if (shouldShow && !existingSection) {
+      const sectionEl = container.createDiv({ cls: sectionClass });
+
+      if (insertAfter && insertAfter.nextSibling) {
+        container.insertBefore(sectionEl, insertAfter.nextSibling);
+      } else if (insertAfter && !insertAfter.nextSibling) {
+        container.appendChild(sectionEl);
+      }
+
+      try {
+        renderFn(sectionEl);
+      } catch (error) {
+        console.error(`[Settings] Error rendering conditional section "${sectionId}":`, error);
+      }
+    } else if (!shouldShow && existingSection) {
+      existingSection.remove();
+    }
+  }
+
+  protected async saveSettings(): Promise<void> {
+    await this.context.plugin.saveSettings();
+  }
 
   /**
    * Render terminal settings
@@ -543,6 +589,48 @@ export class TerminalSettingsRenderer extends BaseSettingsRenderer {
         .onChange((value) => {
           void this.updateAppearanceSetting(() => {
             this.context.plugin.settings.cursorBlink = value;
+          });
+        }));
+
+    // Copy on select
+    new Setting(container)
+      .setName(t('settingsDetails.terminal.copyOnSelect'))
+      .setDesc(t('settingsDetails.terminal.copyOnSelectDesc'))
+      .addToggle(toggle => toggle
+        .setValue(this.context.plugin.settings.copyOnSelect)
+        .onChange((value) => {
+          void this.updateAppearanceSetting(() => {
+            this.context.plugin.settings.copyOnSelect = value;
+          });
+        }));
+
+    // Wiki-link autocomplete
+    new Setting(container)
+      .setName(t('settingsDetails.terminal.wikilinkAutocomplete'))
+      .setDesc(t('settingsDetails.terminal.wikilinkAutocompleteDesc'))
+      .addToggle(toggle => toggle
+        .setValue(this.context.plugin.settings.wikilinkAutocomplete)
+        .onChange((value) => {
+          void this.updateAppearanceSetting(() => {
+            this.context.plugin.settings.wikilinkAutocomplete = value;
+          });
+        }));
+
+    // Wiki-link insert format
+    new Setting(container)
+      .setName(t('settingsDetails.terminal.wikilinkInsertMode'))
+      .setDesc(t('settingsDetails.terminal.wikilinkInsertModeDesc'))
+      .addDropdown(dropdown => dropdown
+        .addOption('wikilink', t('wikilinkInsertModeOptions.wikilink'))
+        .addOption('vault-path', t('wikilinkInsertModeOptions.vaultPath'))
+        .addOption('absolute-path', t('wikilinkInsertModeOptions.absolutePath'))
+        .setValue(this.context.plugin.settings.wikilinkInsertMode)
+        .onChange((value) => {
+          if (!isWikilinkInsertMode(value)) {
+            return;
+          }
+          void this.updateAppearanceSetting(() => {
+            this.context.plugin.settings.wikilinkInsertMode = value;
           });
         }));
 

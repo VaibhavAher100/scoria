@@ -3,7 +3,7 @@ import type { BinaryDownloadSource } from '../../settings/settings';
 export const GITHUB_RELEASE_REPOSITORY = 'ZyphrZero/Termy';
 export const CLOUDFLARE_R2_BASE_URL = 'https://termy.changqiu.xyz';
 
-interface BinaryInfo {
+export interface BinaryInfo {
   filename: string;
   url: string;
   checksumUrl: string;

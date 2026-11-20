@@ -12,6 +12,8 @@ import type { PtyClient } from '@/services/server/ptyClient';
 import type { PtyConfig, ShellEvent, ShellEventSource } from '@/services/server/types';
 import type { DefaultShellOption } from './terminalService';
 import { EnhancedKeyboardProtocol, formatPastedTerminalText } from './enhancedKeyboardProtocol';
+import { WikilinkAutocomplete } from './wikilinkAutocomplete';
+import type { AutocompleteEntry } from './wikilinkAutocomplete';
 import {
   createSynchronizedOutputCompatibilityState,
   filterSynchronizedOutputScrollbackPurge,
@@ -127,6 +129,12 @@ export interface TerminalOptions {
   fontFamily?: string;
   cursorStyle?: 'block' | 'underline' | 'bar';
   cursorBlink?: boolean;
+  copyOnSelect?: boolean;
+  wikilink?: {
+    isEnabled: () => boolean;
+    listEntries: () => AutocompleteEntry[];
+    resolveInsertion: (entry: AutocompleteEntry | null, query: string) => string;
+  };
   scrollback?: number;
   preferredRenderer?: 'canvas' | 'webgl';
   useObsidianTheme?: boolean;
@@ -176,6 +184,7 @@ export class TerminalInstance {
   private shellEventUnsubscribe: (() => void) | null = null;
   
   private containerEl: HTMLElement | null = null;
+  private wikilinkAutocomplete: WikilinkAutocomplete | null = null;
   private options: TerminalOptions;
   private titleState: TerminalTitleState;
   private isInitialized = false;
@@ -729,7 +738,19 @@ export class TerminalInstance {
       extendedKeyboardMode: this.getClaudeCodeExtendedKeyboardMode(),
     }));
 
+    if (this.options.wikilink) {
+      const wikilink = this.options.wikilink;
+      this.wikilinkAutocomplete = new WikilinkAutocomplete(this.xterm, {
+        isEnabled: wikilink.isEnabled,
+        listEntries: wikilink.listEntries,
+        resolveInsertion: wikilink.resolveInsertion,
+        writeToShell: (data) => this.write(data),
+        getContainer: () => this.containerEl,
+      });
+    }
+
     this.xterm.onData((data) => {
+      this.wikilinkAutocomplete?.handleData(data);
       keyboardProtocol.handleData(data);
     });
 
@@ -738,7 +759,20 @@ export class TerminalInstance {
     });
 
     this.xterm.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+      // The autocomplete gets first refusal so its navigation keys do not reach
+      // the shell while the dropdown is open.
+      if (this.wikilinkAutocomplete?.handleKey(event)) {
+        return false;
+      }
       return keyboardProtocol.handleKeyboardEvent(event);
+    });
+
+    this.xterm.onSelectionChange(() => {
+      if (!this.options.copyOnSelect) return;
+      const selection = this.xterm.getSelection();
+      if (selection) {
+        this.writeClipboardFromTerminal(selection, 'copy on select');
+      }
     });
   }
 
@@ -1018,6 +1052,9 @@ export class TerminalInstance {
     if (!keepSession && this.ptyClient && this.sessionId) {
       this.ptyClient.destroySession(this.sessionId);
     }
+
+    this.wikilinkAutocomplete?.dispose();
+    this.wikilinkAutocomplete = null;
 
     this.detach();
 

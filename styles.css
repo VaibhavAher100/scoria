@@ -2242,3 +2242,64 @@
 .preset-script-row .preset-scripts-menu-status-badge {
   margin-left: 8px;
 }
+
+/* ==================== Wiki-link autocomplete dropdown ==================== */
+
+.terminal-wikilink-dropdown {
+  position: absolute;
+  z-index: var(--layer-popover, 30);
+  width: 300px;
+  max-height: 220px;
+  overflow-y: auto;
+  background-color: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m, 6px);
+  box-shadow: var(--shadow-s);
+  font-size: var(--font-ui-small);
+  padding: 4px;
+}
+
+.terminal-wikilink-header {
+  padding: 4px 8px;
+  color: var(--text-muted);
+  font-family: var(--font-monospace);
+  border-bottom: 1px solid var(--background-modifier-border);
+  margin-bottom: 4px;
+}
+
+.terminal-wikilink-empty {
+  padding: 8px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.terminal-wikilink-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: var(--radius-s, 4px);
+  cursor: pointer;
+}
+
+.terminal-wikilink-item.is-selected {
+  background-color: var(--background-modifier-hover);
+}
+
+.terminal-wikilink-item.is-unresolved .terminal-wikilink-name {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.terminal-wikilink-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-wikilink-path {
+  flex-shrink: 0;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}

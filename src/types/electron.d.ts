@@ -2,6 +2,7 @@ declare module 'electron' {
   export interface Shell {
     openExternal: (url: string, options?: { activate?: boolean }) => Promise<void>;
     openPath: (path: string) => Promise<string>;
+    showItemInFolder: (fullPath: string) => void;
   }
 
   export interface WebUtils {

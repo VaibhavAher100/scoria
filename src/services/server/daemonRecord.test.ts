@@ -4,6 +4,7 @@ import {
   parseDaemonRecord,
   serializeDaemonRecord,
   isVersionCompatible,
+  isAcceptableEndpoint,
   type DaemonRecord,
 } from './daemonRecord.ts';
 
@@ -118,4 +119,29 @@ test('isVersionCompatible matches exact versions only', () => {
   assert.equal(isVersionCompatible(record, '1.3.0'), true);
   assert.equal(isVersionCompatible(record, '1.3.1'), false);
   assert.equal(isVersionCompatible(record, '1.2.0'), false);
+});
+
+test('isAcceptableEndpoint: accepts only the requested transport', () => {
+  assert.equal(isAcceptableEndpoint({ pipe: VALID_PIPE }, 'pipe'), true);
+  assert.equal(isAcceptableEndpoint({ socket: VALID_SOCKET }, 'socket'), true);
+  assert.equal(isAcceptableEndpoint({ port: 4000, token: 'abc' }, 'websocket'), true);
+});
+
+test('isAcceptableEndpoint: refuses a port when a pipe or socket was requested', () => {
+  assert.equal(isAcceptableEndpoint({ port: 4000, token: 'abc' }, 'pipe'), false);
+  assert.equal(isAcceptableEndpoint({ port: 4000, token: 'abc' }, 'socket'), false);
+  assert.equal(isAcceptableEndpoint({ port: 4000 }, 'pipe'), false);
+});
+
+test('isAcceptableEndpoint: refuses a WebSocket endpoint with no token', () => {
+  assert.equal(isAcceptableEndpoint({ port: 4000 }, 'websocket'), false);
+  assert.equal(isAcceptableEndpoint({ port: 4000, token: '' }, 'websocket'), false);
+  assert.equal(isAcceptableEndpoint({ port: 0, token: 'abc' }, 'websocket'), false);
+  assert.equal(isAcceptableEndpoint({ port: 70000, token: 'abc' }, 'websocket'), false);
+});
+
+test('isAcceptableEndpoint: refuses malformed pipe and socket paths', () => {
+  assert.equal(isAcceptableEndpoint({ pipe: '\\\\.\\pipe\\evil' }, 'pipe'), false);
+  assert.equal(isAcceptableEndpoint({ socket: '/tmp/evil.sock' }, 'socket'), false);
+  assert.equal(isAcceptableEndpoint({ socket: VALID_SOCKET }, 'pipe'), false);
 });

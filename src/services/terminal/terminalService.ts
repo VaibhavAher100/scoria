@@ -18,11 +18,13 @@ import {
   setCurrentPlatformShell,
 } from '@/settings/settings';
 import type { TerminalInstance } from './terminalInstance';
+import type { AutocompleteEntry } from './wikilinkAutocomplete';
 import { debugLog, debugWarn, errorLog } from '@/utils/logger';
 import { t } from '@/i18n';
 import type { ServerManager } from '@/services/server/serverManager';
 import type { PtyClient } from '@/services/server/ptyClient';
 import { getSelectableShellTypes } from './shellProfiles';
+import { quoteShellArgument, shellQuoteStyleFor, stripShellControlChars } from './terminalPathUtils';
 
 // Preload the TerminalInstance module to avoid dynamic import latency when creating the first terminal
 let terminalInstanceModule: typeof import('./terminalInstance') | null = null;
@@ -183,7 +185,7 @@ export class TerminalService {
    * @returns The created terminal instance
    * @throws Error if terminal creation fails
    */
-  async createTerminal(restoreSessionId?: string): Promise<TerminalInstance> {
+  async createTerminal(restoreSessionId?: string, cwdOverride?: string): Promise<TerminalInstance> {
     try {
       // Ensure the server is running
       await this.serverManager.ensureServer();
@@ -193,9 +195,14 @@ export class TerminalService {
       // Use the preloaded module
       const { TerminalInstance } = await preloadTerminalInstance();
       
-      // Get the working directory if auto-entering the vault directory is enabled
+      // Resolve the working directory. An explicit override (e.g. "open terminal
+      // in this folder") wins; otherwise fall back to the vault directory when
+      // auto-enter is enabled.
       let cwd: string | undefined;
-      if (this.settings.autoEnterVaultDirectory) {
+      if (cwdOverride) {
+        cwd = cwdOverride;
+        debugLog(`[TerminalService] 使用指定工作目录: ${cwd}`);
+      } else if (this.settings.autoEnterVaultDirectory) {
         cwd = this.getVaultPath();
         if (cwd) {
           debugLog(`[TerminalService] 自动进入项目目录: ${cwd}`);
@@ -226,6 +233,12 @@ export class TerminalService {
         fontFamily: this.settings.fontFamily,
         cursorStyle: this.settings.cursorStyle,
         cursorBlink: this.settings.cursorBlink,
+        copyOnSelect: this.settings.copyOnSelect,
+        wikilink: {
+          isEnabled: () => this.settings.wikilinkAutocomplete,
+          listEntries: () => this.listWikilinkEntries(),
+          resolveInsertion: (entry, query) => this.resolveWikilinkInsertion(entry, query, currentShell),
+        },
         scrollback: this.settings.scrollback,
         preferredRenderer: this.settings.preferredRenderer,
         useObsidianTheme: this.settings.useObsidianTheme,
@@ -271,6 +284,79 @@ export class TerminalService {
       debugWarn('[TerminalService] 无法获取 Vault 路径:', error);
     }
     return undefined;
+  }
+
+  /** Resolve a vault-relative path to an absolute on-disk path. */
+  private getAbsolutePath(vaultRelPath: string): string {
+    const adapter = this.app.vault.adapter as { getFullPath?: (p: string) => string };
+    if (adapter && typeof adapter.getFullPath === 'function') {
+      return adapter.getFullPath(vaultRelPath);
+    }
+    return vaultRelPath;
+  }
+
+  /**
+   * Snapshot of vault notes (plus unresolved link targets) for the terminal's
+   * `[[` autocomplete, pre-sorted by modification time descending.
+   */
+  private listWikilinkEntries(): AutocompleteEntry[] {
+    const entries: AutocompleteEntry[] = [];
+    const basenames = new Set<string>();
+
+    for (const file of this.app.vault.getFiles()) {
+      entries.push({
+        name: file.basename,
+        folder: file.parent?.path ?? '',
+        path: file.path,
+        isFile: true,
+        mtime: file.stat.mtime,
+      });
+      basenames.add(file.basename.toLowerCase());
+    }
+
+    const cache = this.app.metadataCache as unknown as {
+      unresolvedLinks?: Record<string, Record<string, number>>;
+    };
+    if (cache.unresolvedLinks) {
+      const seen = new Set<string>();
+      for (const source of Object.values(cache.unresolvedLinks)) {
+        for (const target of Object.keys(source)) {
+          const key = target.toLowerCase();
+          if (basenames.has(key) || seen.has(key)) continue;
+          seen.add(key);
+          entries.push({ name: target, folder: '', path: '', isFile: false, mtime: 0 });
+        }
+      }
+    }
+
+    return entries.sort((a, b) => b.mtime - a.mtime);
+  }
+
+  /**
+   * Build the string written to the shell when a `[[` suggestion is accepted.
+   * The `[[` was already echoed, so path modes prefix two DEL chars to erase
+   * the brackets. Unresolved entries (no on-disk file) always fall back to the
+   * wikilink form.
+   */
+  private resolveWikilinkInsertion(entry: AutocompleteEntry | null, query: string, shellType: ShellType): string {
+    const mode = this.settings.wikilinkInsertMode;
+
+    if (entry && entry.path && (mode === 'vault-path' || mode === 'absolute-path')) {
+      const ERASE_BRACKETS = '\x7f\x7f';
+      const path = mode === 'absolute-path' ? this.getAbsolutePath(entry.path) : entry.path;
+      // Always quote for the active shell. If the shell is unknown or the
+      // path cannot be quoted safely, fall back to the wikilink form below.
+      const style = shellQuoteStyleFor(shellType);
+      const quoted = style ? quoteShellArgument(path, style) : null;
+      if (quoted) {
+        return `${ERASE_BRACKETS}${quoted}`;
+      }
+    }
+
+    // Typed input reaches the shell as-is: never forward control characters.
+    if (entry) return `${stripShellControlChars(entry.name)}]]`;
+    if (query.length > 0) return `${stripShellControlChars(query)}]]`;
+    return ']]';
   }
 
   /**
