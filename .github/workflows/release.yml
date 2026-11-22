@@ -100,6 +100,15 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # The plugin downloads its binary from the release named after its manifest
+      # version, so a tag that differs from manifest.json gives a broken install.
+      - name: Check tag matches manifest version
+        run: |
+          node -e '
+            const v = require("./manifest.json").version;
+            if (v !== process.argv[1]) { console.error(`tag ${process.argv[1]} != manifest.json ${v}`); process.exit(1); }
+          ' "${{ github.ref_name }}"
+
       - uses: pnpm/action-setup@v5
 
       - name: Setup Node.js

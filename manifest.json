@@ -1,7 +1,7 @@
 {
   "id": "scoria",
   "name": "Scoria",
-  "version": "1.4.1",
+  "version": "0.1.0",
   "minAppVersion": "1.8.7",
   "description": "Terminal for Obsidian. Shells keep running across a reload, the daemon talks over an OS-protected pipe or socket, and [[note]] links work in the terminal. Built on xterm.js and a Rust PTY daemon.",
   "author": "Vaibhav Aher",

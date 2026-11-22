@@ -9,9 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-23
+
+First Scoria beta.
+
 ### Added
 - Terminal sessions belong to a separate daemon. A shell keeps running when Obsidian reloads its window or reloads the plugin. A reopened terminal attaches to the same shell with its scrollback. A disable in Settings or a close of the last terminal stops the daemon.
-- `[[` in the terminal opens note autocomplete. Printed `[[note]]` and `obsidian://` links open on click.
+- `[[` in the terminal opens note autocomplete (turn it on in settings). Printed `[[note]]` and `obsidian://` links open on click.
 - Copy on select.
 - Open a terminal in the folder of the current file, or from the file menu ("Open terminal here").
 
