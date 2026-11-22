@@ -48,6 +48,7 @@ const MAX_RESULTS = 10;
 const FILTER_DEBOUNCE_MS = 16;
 const DROPDOWN_WIDTH = 300;
 const DROPDOWN_HEIGHT = 220;
+const MODIFIER_KEYS = new Set(['Shift', 'Control', 'Alt', 'AltGraph', 'Meta']);
 
 export class WikilinkAutocomplete {
   private active = false;
@@ -103,6 +104,24 @@ export class WikilinkAutocomplete {
       } else {
         this.lastCharWasBracket = true;
       }
+    } else {
+      this.lastCharWasBracket = false;
+    }
+  }
+
+  /**
+   * Call for a keydown that the host sent to the PTY itself instead of through
+   * xterm (win32-input-mode or an extended keyboard protocol). Such a key never
+   * reaches `onData`, so `handleData` would not see a typed `[`.
+   */
+  handleDirectKey(e: KeyboardEvent): void {
+    if (e.type !== 'keydown' || this.active) return;
+    if (MODIFIER_KEYS.has(e.key)) return;
+    // AltGr arrives as Ctrl+Alt on Windows and types `[` on many layouts.
+    const altGr = e.ctrlKey && e.altKey;
+    const printable = e.key.length === 1 && !e.metaKey && (altGr || (!e.ctrlKey && !e.altKey));
+    if (printable) {
+      this.handleData(e.key);
     } else {
       this.lastCharWasBracket = false;
     }

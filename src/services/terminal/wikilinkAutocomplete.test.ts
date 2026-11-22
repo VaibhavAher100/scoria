@@ -116,6 +116,41 @@ test('dismiss with a query sends the typed query back to the shell', () => {
   ac.dispose();
 });
 
+test('two directly sent [ keydowns activate (win32-input-mode path)', () => {
+  const { host } = makeHost();
+  const ac = new WikilinkAutocomplete(makeTerminal(), host);
+  ac.handleDirectKey(keydown('['));
+  assert.equal(ac.isActive(), false);
+  ac.handleDirectKey(keydown('Shift'));
+  ac.handleDirectKey(keydown('['));
+  assert.equal(ac.isActive(), true);
+  ac.dispose();
+});
+
+test('a non-printable direct key between the brackets resets the trigger', () => {
+  const { host } = makeHost();
+  const ac = new WikilinkAutocomplete(makeTerminal(), host);
+  ac.handleDirectKey(keydown('['));
+  ac.handleDirectKey(keydown('Backspace'));
+  ac.handleDirectKey(keydown('['));
+  assert.equal(ac.isActive(), false);
+  ac.dispose();
+});
+
+test('direct keys: Ctrl+[ does not count, AltGr+[ counts, keyup is ignored', () => {
+  const { host } = makeHost();
+  const ac = new WikilinkAutocomplete(makeTerminal(), host);
+  ac.handleDirectKey(keydown('['));
+  ac.handleDirectKey(keydown('[', { ctrlKey: true }));
+  assert.equal(ac.isActive(), false);
+
+  ac.handleDirectKey(keydown('[', { ctrlKey: true, altKey: true }));
+  ac.handleDirectKey({ ...keydown('x'), type: 'keyup' } as KeyboardEvent);
+  ac.handleDirectKey(keydown('[', { ctrlKey: true, altKey: true }));
+  assert.equal(ac.isActive(), true);
+  ac.dispose();
+});
+
 test('modifier shortcuts dismiss autocomplete and pass through to the terminal', () => {
   const { host, written } = makeHost();
   const ac = new WikilinkAutocomplete(makeTerminal(), host);
