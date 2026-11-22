@@ -2,248 +2,163 @@
 
 # Scoria
 
-<img src="assets\termy-tg-avatar-transparent.svg" width="150" alt="Termy logo" />
+<img src="assets/scoria-hero.png" width="240" alt="Scoria logo: a glass hexagon with a terminal prompt" />
 
-*AI CLI-integrated terminal for Obsidian*
+*A secure, persistent, cross-platform terminal that lives inside Obsidian.*
 
-Powered by xterm.js and a native Rust PTY backend, with split panes, reusable workflows, and file-aware interactions.
-
-[![Version](https://img.shields.io/badge/version-1.4.1-7c3aed?style=for-the-badge)](./manifest.json)
+[![Version](https://img.shields.io/badge/version-0.1.0%20beta-7c3aed?style=for-the-badge)](./manifest.json)
 [![Obsidian](https://img.shields.io/badge/Obsidian-Desktop%20Only-8b5cf6?style=for-the-badge)](https://obsidian.md/)
-[![Community Plugin](https://img.shields.io/badge/Obsidian-Community%20Plugin-22c55e?style=for-the-badge)](https://obsidian.md/plugins?id=termy)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue?style=for-the-badge)](./LICENSE)
-[![PTY](https://img.shields.io/badge/backend-Rust%20PTY-f97316?style=for-the-badge)](./rust-servers)
+[![Backend](https://img.shields.io/badge/backend-Rust%20PTY-f97316?style=for-the-badge)](./rust-servers)
+[![Install](https://img.shields.io/badge/install-BRAT-22c55e?style=for-the-badge)](https://github.com/TfTHacker/obsidian42-brat)
 
-English / [简体中文](./README_ZH.md)
+[Why Scoria](#why-scoria) · [Status](#where-this-is) · [Install](#install) · [Features](#features) · [Architecture](#architecture) · [Roadmap](#roadmap)
 
-[Install](#installation) · [Quick Start](#quick-start) · [Features](#features) · [Screenshots](#visual-tour) · [Report Issues](https://github.com/ZyphrZero/Termy/issues) · [Telegram](https://t.me/+t6oRqhaw8c1jNzE1)
-
-<p align="center">
-  <img src="assets/termy-workspace-overview.png" width="980" alt="Termy main workspace preview with Obsidian, Codex CLI, OpenCode, and Claude Code" />
-</p>
+<img src="assets/scoria-screenshot.png" width="860" alt="Scoria in an Obsidian vault: a note above, a terminal below with the [[ note picker open" />
 
 </div>
 
 ---
 
-## Why Termy?
+## Why Scoria
 
-Termy is built for people who already live in Obsidian and do real work in a terminal. It is designed as more than a terminal pane: it provides a workflow-oriented terminal environment that stays aligned with your vault, editor context, and AI coding sessions.
+A terminal inside Obsidian should be boring in the best way: it should be there when you open the vault, survive a reload without losing your shell, and not open a hole in your machine while doing it.
 
-- **Native PTY backend**: Rust keeps the backend lean and avoids extra bridge runtimes.
-- **Real terminal UX**: xterm.js frontend with search, copy/paste, prompt navigation, split panes, and multi-session support.
-- **Workflow-driven automation**: Run reusable terminal, Obsidian-command, and external-link workflows from the status bar or command palette.
-- **File-aware interactions**: Drag text, files, and folders into the terminal and open file references directly from terminal output.
-- **AI-aware context handoff**: Claude Code, Codex CLI, and OpenCode integrations can inherit active note context from Obsidian.
-- **Desktop-first customization**: Shell selection, tab/split placement rules, theme sync, background images, blur, renderer controls, and Windows input handling.
+Scoria started as a fork of [Termy](https://github.com/ZyphrZero/Termy), which already had the right shape - xterm.js in the renderer, a real PTY running out of process in a Rust backend. Two things stopped it from being something I would hand to other people:
 
-## Features
+- **The backend was open.** The PTY server listened on an unauthenticated local WebSocket (`127.0.0.1:<port>`). Any local process could connect and drive a shell with your permissions.
+- **Sessions did not survive.** Reloading Obsidian, or a transient transport drop, killed the running shell. Long jobs died with the window.
 
-### Terminal Workspace
+Scoria rebuilds that foundation:
 
-- Run local shells directly inside Obsidian on Windows, macOS, and Linux.
-- Use `cmd`, PowerShell, PowerShell Core, WSL, Git Bash, `bash`, `zsh`, or a custom shell path.
-- Open terminals in the current tab, a new tab, left/right tab groups, horizontal/vertical splits, or a new window.
-- Search terminal output, clear screen or buffer, resize fonts, navigate prompts, and copy/paste normally.
-- Keep new terminals near existing terminal tabs, focus them automatically, or pin them on creation.
+- **Authenticated transport.** On Windows the PTY runs over a named pipe locked to your user with a DACL; on macOS and Linux over a Unix domain socket with `0600` permissions in an owner-only directory; the WebSocket fallback now requires a capability token. The pipe and the socket need no secret: the OS checks who connects. The WebSocket fallback sends its 256-bit token in the first message, and only over loopback.
+- **A persistent daemon.** The PTY backend outlives the plugin. Reload Obsidian and your shells reattach, with the output you missed replayed back into the same terminal.
+- **Cross-platform from one codebase.** The same transport story works on Windows, macOS, and Linux, picking the right primitive per OS.
+- **Its own binary.** Scoria downloads its PTY backend from this project's own GitHub Releases - the authenticated build from this repo - and never from a third-party host.
 
-### Workflows & Launchers
+The inherited Termy surface (multiple shells, splits, workflows, AI CLI launchers, drag-and-drop, clickable output) is still here. Scoria's contribution is the layer underneath it.
 
-- Create preset workflows with one or more ordered actions.
-- Combine terminal commands, Obsidian commands, and external links in a single workflow.
-- Launch workflows from the status bar menu, command palette, or built-in workflow commands.
-- Decide whether each workflow appears in the status bar, opens a terminal, starts a fresh terminal instance, or renames the target tab.
-- Start quickly with built-in launchers for Claude Code, Codex CLI, OpenCode, and Gemini CLI.
+## Where this is
 
-### Obsidian Interactions
+**Public beta.** The security, persistence, and cross-platform work is merged and reviewed. What remains before a 1.0 is hardening in real use and the polish that only early users surface.
 
-- Send the current editor selection, full note, or active note path into the active terminal.
-- Drag text, files, and folders into the terminal to paste content or resolved paths.
-- Click file references printed by tools, agents, scripts, or compilers to reopen matching vault files or external paths.
-- Open the bundled changelog from the command palette or settings.
+- **Not yet in the Obsidian community directory.** Install with BRAT or manually for now (see [Install](#install)). Listing is a planned post-beta step, not a blocker.
+- **Desktop only.** The native PTY backend rules out mobile.
+- **macOS:** the binary is built in CI, and the socket checks (owner-only socket and directory, per-user temp dir, path length) pass on the CI macOS runner. Nobody has run it on Mac hardware yet, and the binary is not code-signed or notarized.
 
-### AI & Coding Integrations
+Honest scope: today Scoria is a *secure, persistent, cross-platform* Obsidian terminal. Deeper vault-native features - semantic command tracking, sending command output straight into a note - are the next milestone, not a current claim. See [Roadmap](#roadmap).
 
-> [!NOTE]
-> Claude Code, OpenCode, or Codex sessions started from an external terminal are ordinary CLI processes outside Termy's Obsidian integration layer, so they cannot automatically know the active note, vault/workspace root, or editor selection.
+## Install
 
-- Termy starts AI CLIs inside the current vault context, where the active note, selection, open files, and workspace root can be available to coding tasks.
-- Claude Code and OpenCode use Termy's IDE bridge; Codex uses a vault-local Skill at `.agents/skills/termy-obsidian-context/SKILL.md`.
-- The built-in Codex launcher starts `codex` directly, without MCP registration or global CLI configuration changes.
+### BRAT (recommended for the beta)
 
-### Privacy and Network Access
+1. Install [BRAT](https://github.com/TfTHacker/obsidian42-brat) from the community plugins.
+2. In BRAT settings choose **Add beta plugin**.
+3. Enter `VaibhavAher100/scoria`.
+4. Enable **Scoria** in **Settings → Community plugins**.
 
-- Termy does not include telemetry or analytics.
-- Termy downloads the matching native PTY server binary when needed. The default source is `https://termy.changqiu.xyz`; GitHub Releases can be selected in settings, and offline mode disables automatic download/update checks.
-- Terminal sessions run local shell commands and user-configured workflows. Those commands may read files, modify files, or access the network according to the shell command or external CLI being run.
-- Termy starts local WebSocket connections for its PTY backend and optional IDE bridge. These connections are used for local terminal transport and editor-context handoff.
-- Context-aware AI launchers can pass the active note path, selection, editor context, and vault/workspace path to local CLI tools. The Codex integration writes a vault-local helper skill under `.agents/skills/termy-obsidian-context/`.
-- Optional: when **Check for AI launcher updates** is enabled in settings, Termy queries `https://registry.npmjs.org` for the latest Claude Code and Codex CLI releases, and `https://api.github.com` for the latest OpenCode release. The setting is **off by default** and offline mode disables it regardless of the toggle.
+### Manual
 
-### Appearance & Ergonomics
+1. Download the latest release from [GitHub Releases](https://github.com/VaibhavAher100/scoria/releases).
+2. Extract `main.js`, `manifest.json`, and `styles.css` into `.obsidian/plugins/scoria/` in your vault.
+3. Reload Obsidian and enable **Scoria** in **Settings → Community plugins**.
 
-- Follow the Obsidian theme or use custom foreground and background colors.
-- Choose Canvas or WebGL rendering, with automatic Canvas fallback when background images are enabled.
-- Configure background image URL/path, opacity, size, position, blur amount, and text opacity.
-- Use localized UI in English, Simplified Chinese, Japanese, Korean, and Russian.
-- Tune Windows-friendly input behavior with `win32-input-mode` support for shells that depend on native key events.
-
-## Visual Tour
-
-<details open>
-<summary><strong>Workspace preview</strong></summary>
-<br />
-
-<p align="center">
-  <img src="assets/termy-workspace-overview.png" width="980" alt="Termy full workspace preview" />
-</p>
-
-</details>
-
-<details>
-<summary><strong>Workflow UI</strong></summary>
-<br />
-
-<table>
-  <tr>
-    <td width="34%" align="center">
-      <img src="assets/termy-statusbar-workflows.png" alt="Termy workflow launcher menu from the status bar" />
-      <br />
-      <sub>Status bar workflow launcher</sub>
-    </td>
-    <td width="66%" align="center">
-      <img src="assets/termy-settings-workflows.png" alt="Termy workflow settings with built-in Claude Code, Codex CLI, OpenCode, and Gemini CLI entries" />
-      <br />
-      <sub>Workflow configuration, instance behavior, and built-in launchers</sub>
-    </td>
-  </tr>
-</table>
-
-<p align="center">
-  <img src="assets/termy-workflow-editor.png" width="900" alt="Termy preset workflow editor with actions, notes, and context-awareness settings" />
-  <br />
-  <sub>Preset workflow editor with action ordering, notes, and context-awareness controls</sub>
-</p>
-
-</details>
-
-<details>
-<summary><strong>Theme customization</strong></summary>
-<br />
-
-<p align="center">
-  <img src="assets/termy-settings-theme.png" width="900" alt="Termy theme settings with background image, blur, and text opacity controls" />
-</p>
-
-</details>
-
-## Command Highlights
-
-| Command | What it does |
-| --- | --- |
-| `Open Termy terminal` | Opens a new Termy instance using your configured placement rules. |
-| `Termy: show changelog` | Opens the bundled changelog modal. |
-| `Terminal: split horizontal / split vertical` | Splits the active terminal. |
-| `Terminal: send selection` | Sends the current editor selection to the active terminal. |
-| `Terminal: send current note` | Sends the full current note content. |
-| `Terminal: send current path` | Sends the active note path. |
-| `Terminal: previous prompt / next prompt` | Navigates prompt history. |
-| `Terminal: last failed command` | Jumps to the most recent failed command when available. |
-
-## Installation
+On first launch Scoria fetches the matching PTY backend for your platform from this repo's releases. No local Rust toolchain is needed to use it.
 
 ### Requirements
 
-- Obsidian Desktop
-- Windows, macOS, or Linux
+- Obsidian Desktop (Windows, macOS, or Linux)
 
-> [!WARNING]
-> Termy is desktop-only because it uses a native PTY backend.
+## Quick start
 
-### Install from the Obsidian Community Plugins (recommended)
+1. Open Scoria from the ribbon, command palette, or status bar.
+2. Pick your shell and where new terminals open in settings.
+3. Open a terminal in the current note's folder with **Open terminal here** (right-click a file) or the matching command.
+4. Run a long job, reload Obsidian, and watch the shell reattach.
+5. Send a selection, the current note, or its path into the terminal.
+6. Click a `[[wikilink]]`, `obsidian://` URL, or file path printed in the output to jump to it.
 
-Termy is now listed in the official Obsidian Community Plugins directory.
+## Features
 
-1. Open **Settings → Community plugins** and turn off **Restricted mode** if it is enabled.
-2. Click **Browse** and search for `Termy`.
-3. Click **Install**, then **Enable**.
+### The foundation (what Scoria adds)
 
-### Install with BRAT (early updates)
+- **Authenticated PTY transport** per OS: user-scoped named pipe (Windows), `0600` Unix domain socket (macOS/Linux), token-gated WebSocket fallback.
+- **Reload-surviving sessions** through a persistent daemon, with bounded replay of missed output on reattach.
+- **Own-host binary provenance** - the backend comes only from this project's GitHub Releases and is checked against a SHA-256 hash pinned inside the plugin. A download that does not match is deleted and never runs; at startup, a backend that does not match the pin is downloaded again. Offline mode skips this check (see [Privacy](#privacy-and-network-access)).
+- **Vault-aware terminals** - launch in a note's folder, `[[` wikilink autocomplete at the prompt (opt-in in settings), clickable `[[wikilinks]]` and `obsidian://` links in output, copy-on-select.
 
-Use BRAT if you want to track the latest tagged build before it ships to the community directory.
+### Inherited from Termy
 
-1. Install [BRAT](https://github.com/TfTHacker/obsidian42-brat).
-2. Open BRAT settings and choose **Add beta plugin**.
-3. Enter `ZyphrZero/Termy`.
-4. Install the plugin and enable it in **Settings → Community plugins**.
-
-### Manual install
-
-1. Download the latest release from [GitHub Releases](https://github.com/ZyphrZero/Termy/releases).
-2. Extract the release files into `.obsidian/plugins/termy/` inside your vault.
-3. Reload Obsidian.
-4. Enable Termy in **Settings → Community plugins**.
-
-## Quick Start
-
-1. Open Termy from the ribbon, command palette, empty-tab action, or status bar.
-2. Choose your shell and terminal placement behavior in settings.
-3. Try the built-in workflows from the status bar menu.
-4. Send your current selection, note, or file path into the terminal.
-5. Drag a file or folder into the terminal to paste its resolved path.
-6. Click file references printed by tools or agents to jump back into the matching file.
-
-## Development
-
-```bash
-pnpm install
-pnpm build
-pnpm build:rust
-pnpm package:zip
-```
-
-| Script | Purpose |
-| --- | --- |
-| `pnpm dev` | Frontend build/watch flow. |
-| `pnpm build` | TypeScript check, production bundle, and bundle smoke check. |
-| `pnpm build:rust` | Build native PTY backend binaries. |
-| `pnpm package:zip` | Create a release zip. |
-| `pnpm install:dev <vault-path>` | Build everything and install into a local dev vault. Pass `--no-rust` to skip the native PTY rebuild when only TypeScript changed. |
-| `pnpm test:terminal` | Compile and run terminal-layer Node tests. |
+- Local shells on Windows, macOS, and Linux: `cmd`, PowerShell, PowerShell Core, WSL, Git Bash, `bash`, `zsh`, or a custom path.
+- Splits, tab groups, new-window placement, search, prompt navigation, font resize, copy/paste.
+- Reusable workflows mixing terminal commands, Obsidian commands, and external links, launched from the status bar or palette.
+- Send the editor selection, full note, or note path into the active terminal; drag files and folders in to paste resolved paths.
+- AI CLI launchers (Claude Code, Codex CLI, OpenCode, Gemini CLI) started inside the current vault context.
+- Theme sync, Canvas/WebGL rendering, background images and blur, localized UI.
 
 ## Architecture
 
 ```mermaid
 graph LR
-  A[Obsidian Plugin UI] --> B[xterm.js Terminal]
-  B --> C[Native Rust PTY Server]
-  A --> D[Workflow Launcher]
-  A --> E[Context Services]
-  E --> F[Claude/OpenCode IDE Bridge]
-  E --> G[Codex Skill Context]
-  D --> H[AI CLI Launchers]
+  A[Obsidian Plugin - TypeScript] --> B[xterm.js Terminal]
+  A --> T{Transport}
+  T -->|Windows| P[Named Pipe + DACL]
+  T -->|macOS/Linux| U[Unix Socket 0600]
+  T -->|fallback| W[Token-gated WebSocket]
+  P --> D[Rust PTY Daemon]
+  U --> D
+  W --> D
+  D --> S[portable-pty shells]
 ```
 
-- **Frontend**: TypeScript, Obsidian plugin APIs, and xterm.js.
-- **Backend**: Native Rust PTY server built on `portable-pty`.
-- **AI context**: Claude Code and OpenCode integrate through the IDE bridge; Codex integrates through a vault-local Skill.
-- **Packaging**: Generated plugin assets are emitted as `main.js` and `styles.css`; native binaries are copied to `binaries/`.
+The renderer never owns the PTY. xterm.js draws the terminal; the actual shell runs in a separate Rust process and talks to the plugin over an OS-authenticated transport. That process is a daemon - it stays alive across plugin reloads so sessions persist, and it is reachable only by your own user.
 
-## License
+- **Frontend:** TypeScript, Obsidian plugin APIs, xterm.js.
+- **Backend:** Rust PTY daemon on `portable-pty`, framed binary protocol (`[len:u32 LE][type:u8][payload]`).
+- **Transport:** named pipe / Unix domain socket / authenticated WebSocket, chosen per platform.
 
-Termy is licensed under [GPL-3.0](./LICENSE).
+## Roadmap
+
+- **Now (beta):** stabilize in real use, confirm macOS on real hardware, gather early-user feedback.
+- **Next (M5):** semantic shell integration (full OSC 133/633 command lifecycle - per-command status, navigation) and vault capture - send command output straight into a note.
+- **Later:** broader feature parity (per-tab colour, tab hotkeys, startup commands), then submission to the Obsidian community directory.
+
+## Development
+
+```bash
+pnpm install
+pnpm build         # tsc check, production bundle, smoke check
+pnpm build:rust    # build the native PTY backend
+pnpm install:dev <vault-path>   # build everything and install into a dev vault
+```
+
+| Script | Purpose |
+| --- | --- |
+| `pnpm dev` | Frontend build/watch. |
+| `pnpm build` | TypeScript check, production bundle, bundle smoke check. |
+| `pnpm build:rust` | Build native PTY backend binaries. |
+| `pnpm install:dev <vault>` | Build and install into a local dev vault (`--no-rust` to skip the native rebuild). |
+| `pnpm test:terminal` | Compile and run the terminal-layer Node tests. |
+
+## Privacy and network access
+
+- No telemetry, no analytics.
+- On first use Scoria downloads the matching PTY backend from this project's **own** GitHub Releases (`VaibhavAher100/scoria`) and verifies it against a SHA-256 hash pinned in the plugin bundle. It never downloads from a third-party host.
+- Offline mode turns off downloads and update checks. It also skips the hash check: Scoria runs whatever backend is in the plugin's `binaries/` folder.
+- Terminal sessions run local shell commands. Those commands can read files, write files, or reach the network according to what you run - the same as any terminal.
+- The PTY transport is local and authenticated to your user (named pipe / `0600` socket / token-gated WebSocket). Only the WebSocket fallback sends a secret, and it sends its token over loopback.
+- AI CLI launchers can pass the active note path, selection, and vault root to local CLI tools you start. The Codex integration writes a vault-local helper skill under `.agents/skills/`.
+
+## License and attribution
+
+Scoria is licensed under [GPL-3.0](./LICENSE).
+
+Scoria is a modified fork of [Termy](https://github.com/ZyphrZero/Termy) by ZyphrZero, also GPL-3.0. The original is © ZyphrZero and the Termy contributors; Scoria's modifications are © Vaibhav Aher. The full attribution and a dated list of significant changes are in [NOTICE](./NOTICE).
 
 ## Credits
 
+- [Termy](https://github.com/ZyphrZero/Termy) - the fork this is built on.
 - [xterm.js](https://xtermjs.org/)
 - [portable-pty](https://github.com/wez/wezterm/tree/main/pty)
-
----
-
-<div align="center">
-
-**Made with ❤️ for Obsidian power users**
-
-If Termy helps your workflow, consider starring the project.
-
-</div>
+</content>
+</invoke>
