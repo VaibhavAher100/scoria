@@ -391,10 +391,21 @@ mod tests {
         assert_eq!(id.len(), 32, "{name}");
         assert!(id.bytes().all(|b| b.is_ascii_hexdigit()), "{name}");
         assert_eq!(path.file_name().unwrap(), "daemon.sock");
-        // macOS: temp_dir() is `/var/folders/xx/<30 chars>/T/` (49 bytes) and
-        // sun_path holds at most 103 bytes plus the NUL.
-        assert!(49 + name.len() + "/daemon.sock".len() <= 103, "{name}");
+        // sun_path holds at most 103 bytes plus the NUL on macOS (107 on Linux).
+        // Measure the real path, so the check holds for this runner's base dir.
+        let len = path.as_os_str().len();
+        assert!(len <= 103, "{len} bytes: {}", path.display());
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// M4 S5: on macOS the socket base is the per-user temp dir under
+    /// `/var/folders`, owned by the user with no group or other access.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_base_dir_is_private_per_user_temp() {
+        let base = pick_base_dir();
+        assert!(base.starts_with("/var/folders/"), "{}", base.display());
+        assert!(is_private_owned_dir(&base), "{}", base.display());
     }
 
     #[test]
