@@ -38,14 +38,13 @@ test('renderReleaseBody describes the package without requiring CHANGELOG.md as 
   assert.doesNotMatch(body, /\[Discussions\]\(/);
   assert.ok(body.startsWith('## Changelog\n\n### Added\n- Embedded changelog support.\n\n## Installation'));
 
-  // Community plugins is the recommended path; BRAT is offered as the early-updates fallback.
-  const communityIndex = body.indexOf('### Obsidian Community Plugins (Recommended)');
-  const bratIndex = body.indexOf('### BRAT (Early Updates)');
+  // Scoria is not in the Community Plugins directory yet: BRAT first, then manual install.
+  const bratIndex = body.indexOf('### BRAT (Beta)');
   const manualIndex = body.indexOf('### Manual Installation');
-  assert.ok(communityIndex !== -1, 'Community Plugins section should be present');
   assert.ok(bratIndex !== -1, 'BRAT section should be present');
   assert.ok(manualIndex !== -1, 'Manual Installation section should be present');
-  assert.ok(communityIndex < bratIndex, 'Community Plugins should come before BRAT');
   assert.ok(bratIndex < manualIndex, 'BRAT should come before Manual Installation');
-  assert.match(body, /Click \*\*Browse\*\*, search for `Scoria`/);
+  assert.doesNotMatch(body, /Community Plugins \(Recommended\)|search for `Scoria`/);
+  assert.match(body, /add the beta plugin `VaibhavAher100\/scoria`/);
+  assert.match(body, /checks it against the SHA-256 pinned in the plugin/);
 });
