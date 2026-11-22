@@ -14,7 +14,7 @@
 
 [Why Scoria](#why-scoria) · [Status](#where-this-is) · [Install](#install) · [Features](#features) · [Architecture](#architecture) · [Roadmap](#roadmap)
 
-<img src="assets/scoria-screenshot.png" width="860" alt="Scoria in an Obsidian vault: a note above, a terminal below with the [[ note picker open" />
+<img src="assets/scoria-reload.gif" width="760" alt="A loop counts build steps in the Scoria terminal. Obsidian reloads its window, and the same loop keeps counting in the same shell." />
 
 </div>
 
@@ -79,6 +79,8 @@ On first launch Scoria fetches the matching PTY backend for your platform from t
 6. Click a `[[wikilink]]`, `obsidian://` URL, or file path printed in the output to jump to it.
 
 ## Features
+
+<img src="assets/scoria-screenshot.png" width="860" alt="Scoria in an Obsidian vault: a note above, a terminal below with the [[ note picker open" />
 
 ### The foundation (what Scoria adds)
 
