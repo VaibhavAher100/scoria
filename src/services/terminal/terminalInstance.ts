@@ -764,7 +764,12 @@ export class TerminalInstance {
       if (this.wikilinkAutocomplete?.handleKey(event)) {
         return false;
       }
-      return keyboardProtocol.handleKeyboardEvent(event);
+      const allowDefault = keyboardProtocol.handleKeyboardEvent(event);
+      if (!allowDefault) {
+        // xterm will not emit onData for this key, so tell the autocomplete here.
+        this.wikilinkAutocomplete?.handleDirectKey(event);
+      }
+      return allowDefault;
     });
 
     this.xterm.onSelectionChange(() => {
