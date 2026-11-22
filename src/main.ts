@@ -51,6 +51,7 @@ import {
 } from './services/terminal/aiLauncherStatus';
 import { LauncherInstallModal } from './ui/terminal/launcherInstallModal';
 import { resolveChangelogSection } from './utils/changelog';
+import { toSlashPath } from './utils/platform';
 import embeddedChangelogContent from '../CHANGELOG.md';
 
 // Import terminal styles
@@ -2889,7 +2890,7 @@ export default class TerminalPlugin extends Plugin {
     if (!(adapter instanceof FileSystemAdapter)) {
       throw new Error('FileSystemAdapter is not available');
     }
-    const vaultPath = normalizePath(adapter.getBasePath());
+    const vaultPath = toSlashPath(adapter.getBasePath());
     const configDir = normalizePath(this.app.vault.configDir);
     const manifestDir = this.manifest.dir
       ? normalizePath(this.manifest.dir)
@@ -2899,7 +2900,7 @@ export default class TerminalPlugin extends Plugin {
       return manifestDir;
     }
 
-    return normalizePath(`${vaultPath}/${manifestDir}`);
+    return `${vaultPath}/${manifestDir}`;
   }
 
   private isAbsolutePath(path: string): boolean {
