@@ -1,9 +1,9 @@
 import type { App, Editor, EventRef, TFile } from 'obsidian';
-import { FileSystemAdapter, normalizePath } from 'obsidian';
+import { FileSystemAdapter } from 'obsidian';
 import { WebSocket, WebSocketServer, type RawData } from 'ws';
 import { buildIdeBridgeTerminalEnv } from '../context/agentContext';
 import { debugLog, errorLog } from '@/utils/logger';
-import { getHomeDir } from '@/utils/platform';
+import { getHomeDir, toSlashPath } from '@/utils/platform';
 
 /**
  * Node built-in modules are resolved on demand inside the
@@ -366,7 +366,7 @@ export class ClaudeCodeIdeBridge {
   private getVaultPath(): string | null {
     const adapter = this.app.vault.adapter;
     if (adapter instanceof FileSystemAdapter) {
-      return normalizePath(adapter.getBasePath());
+      return toSlashPath(adapter.getBasePath());
     }
 
     return null;

@@ -6,7 +6,7 @@ import type {
   TFile,
   WorkspaceLeaf,
 } from "obsidian";
-import { normalizePath } from "obsidian";
+import { toSlashPath } from "@/utils/platform";
 
 /**
  * Node built-ins are resolved on demand inside the
@@ -352,7 +352,7 @@ export class AgentContextBridge {
   private getVaultRoot(): string | null {
     const adapter = this.app.vault.adapter as { getBasePath?: () => string };
     if (adapter && typeof adapter.getBasePath === "function") {
-      return normalizePath(adapter.getBasePath());
+      return toSlashPath(adapter.getBasePath());
     }
 
     return null;
