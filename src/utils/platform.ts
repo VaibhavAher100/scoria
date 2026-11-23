@@ -26,7 +26,8 @@ export function isLinux(): boolean {
  * as `/home/me/vault` into a relative one.
  */
 export function toSlashPath(absolutePath: string): string {
-  return absolutePath.replace(/\\/g, '/').replace(/(.)\/+$/, '$1');
+  // Keep the slash of a root: `/` and `C:/`.
+  return absolutePath.replace(/\\/g, '/').replace(/([^/:])\/+$/, '$1');
 }
 
 /** Returns the user's home directory, or an empty string when unavailable. */

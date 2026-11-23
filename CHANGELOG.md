@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Linux and macOS: the plugin folder path lost its leading `/`, so the server binary, the daemon file and the agent context files went to a folder under the directory Obsidian started in. They now go to the vault's plugin folder. The plugin downloads the binary again there and checks it against the pinned SHA-256. Files at the old place are not used; you can delete them.
+- Linux and macOS: the Claude Code IDE bridge now gives the real vault path, so Claude Code started in the vault can find the bridge.
+
 ## [0.1.0] - 2026-11-23
 
 First Scoria beta.

@@ -9,6 +9,8 @@ test('toSlashPath keeps the Unix root and converts Windows separators', () => {
   assert.equal(toSlashPath('C:\\Users\\me\\vault'), 'C:/Users/me/vault');
   assert.equal(toSlashPath('C:\\Users\\me\\vault\\'), 'C:/Users/me/vault');
   assert.equal(toSlashPath('/'), '/');
+  assert.equal(toSlashPath('C:\\'), 'C:/');
+  assert.equal(toSlashPath('\\\\srv\\share\\vault'), '//srv/share/vault');
 });
 
 test('getPlatform mirrors the current Node platform', () => {
