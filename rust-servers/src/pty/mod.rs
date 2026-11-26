@@ -302,6 +302,7 @@ impl PtyHandler {
         ).map_err(|e| RouterError::ModuleError(format!("创建 PTY 会话失败: {}", e)))?;
         
         // Create the session context
+        let child = pty_session.child();
         let pty_session = Arc::new(TokioMutex::new(pty_session));
         let pty_reader = Arc::new(Mutex::new(pty_reader));
         let pty_writer = Arc::new(Mutex::new(pty_writer));
@@ -318,7 +319,7 @@ impl PtyHandler {
         let reattach = Arc::clone(&context.reattach);
         let exited = Arc::clone(&context.exited);
         let read_task = self
-            .start_read_task(session_id.clone(), pty_reader, pty_writer, shell_type, replay, reattach, exited)
+            .start_read_task(session_id.clone(), pty_reader, pty_writer, child, shell_type, replay, reattach, exited)
             .await?;
         context.read_task = Some(read_task);
         
@@ -352,6 +353,7 @@ impl PtyHandler {
         session_id: String,
         reader: Arc<Mutex<PtyReader>>,
         _writer: Arc<Mutex<PtyWriter>>,
+        child: Arc<Mutex<Box<dyn portable_pty::Child + Send + Sync>>>,
         _shell_type: Option<String>,
         replay: Arc<TokioMutex<ReplayBuffer>>,
         reattach: Arc<Notify>,
@@ -376,6 +378,34 @@ impl PtyHandler {
 
             let (read_tx, mut read_rx) = tokio::sync::mpsc::channel::<ReadEvent>(32);
             let reader_for_thread = Arc::clone(&reader);
+
+            // Exit waiter (D4), Windows only: the ConPTY master gives no EOF when
+            // the shell exits, so EOF alone never reports the exit. Poll the
+            // child instead; the thread ends with the child or with this task.
+            // Unix keeps the reader EOF, which arrives after the last output.
+            #[cfg(windows)]
+            let exit_tx = read_tx.clone();
+            #[cfg(windows)]
+            let child_for_wait = Arc::clone(&child);
+            #[cfg(windows)]
+            tokio::task::spawn_blocking(move || loop {
+                let status = match child_for_wait.lock() {
+                    Ok(mut c) => c.try_wait(),
+                    Err(_) => return,
+                };
+                match status {
+                    Ok(Some(_)) => {
+                        // Let the last output reach the reader before the exit.
+                        std::thread::sleep(Duration::from_millis(100));
+                        let _ = exit_tx.blocking_send(ReadEvent::Eof);
+                        return;
+                    }
+                    Ok(None) if !exit_tx.is_closed() => {
+                        std::thread::sleep(Duration::from_millis(200));
+                    }
+                    _ => return,
+                }
+            });
 
             tokio::task::spawn_blocking(move || {
                 loop {
@@ -573,12 +603,23 @@ impl PtyHandler {
                     // SESSION_NOT_FOUND so the client respawns instead of adopting
                     // a dead shell; the context is reaped by the orphan timeout.
                     if let Some(sender) = &current_sender {
+                        // Real exit code. After a Unix EOF the child may not be
+                        // reaped yet, so wait up to ~200 ms; 0 if still unknown.
+                        let mut code = 0u32;
+                        for _ in 0..10 {
+                            let status = child.lock().ok().and_then(|mut c| c.try_wait().ok().flatten());
+                            if let Some(status) = status {
+                                code = status.exit_code();
+                                break;
+                            }
+                            time::sleep(Duration::from_millis(20)).await;
+                        }
                         let exit_response = ServerResponse::new(
                             ModuleType::Pty,
                             "exit",
                             serde_json::json!({
                                 "session_id": session_id,
-                                "code": 0
+                                "code": code
                             }),
                         );
                         if let Err(e) = sender.send(OutMessage::Text(exit_response.to_json())).await {
@@ -816,16 +857,65 @@ mod tests {
     #[derive(Default)]
     struct CollectSink {
         binary: StdMutex<Vec<u8>>,
+        text: StdMutex<Vec<String>>,
     }
 
     #[async_trait::async_trait]
     impl MessageSink for CollectSink {
         async fn send(&self, msg: OutMessage) -> Result<(), SinkError> {
-            if let OutMessage::Binary(b) = msg {
-                self.binary.lock().unwrap().extend_from_slice(&b);
+            match msg {
+                OutMessage::Binary(b) => self.binary.lock().unwrap().extend_from_slice(&b),
+                OutMessage::Text(t) => self.text.lock().unwrap().push(t),
             }
             Ok(())
         }
+    }
+
+    /// D4: a shell that exits by itself sends `exit` with its real exit code,
+    /// also on Windows, where the ConPTY master gives no EOF on a child exit.
+    #[tokio::test]
+    async fn shell_exit_sends_exit_event_with_real_code() {
+        let handler = PtyHandler::new();
+        let sink = Arc::new(CollectSink::default());
+        handler.set_sender(sink.clone()).await;
+        handler
+            .handle_init(Some("cmd".into()), None, None, None, Some(80), Some(24))
+            .await
+            .expect("init session");
+        let session_id = only_session_id(&handler).await;
+
+        let exit_message = |texts: &[String]| {
+            texts
+                .iter()
+                .find(|t| t.contains("\"exit\""))
+                .cloned()
+        };
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let mut answered = 0usize;
+        let mut sent = false;
+        let exit = loop {
+            if let Some(exit) = exit_message(&sink.text.lock().unwrap()) {
+                break exit;
+            }
+            let snap = sink.binary.lock().unwrap().clone();
+            answered = answer_cursor_queries(&handler, &session_id, &snap, answered).await;
+            if !sent && answered > 0 {
+                handler
+                    .write_data(&session_id, b"exit 7\r\n")
+                    .await
+                    .expect("write exit");
+                sent = true;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "no exit event after the shell exited; texts={:?}",
+                sink.text.lock().unwrap()
+            );
+            sleep(Duration::from_millis(50)).await;
+        };
+        assert!(exit.contains("\"code\":7"), "exit message: {exit}");
+
+        handler.handle_destroy(&session_id).await.ok();
     }
 
     fn contains(hay: &[u8], needle: &[u8]) -> bool {

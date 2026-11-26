@@ -125,9 +125,18 @@ impl PtySession {
         Ok(())
     }
     
+    /// Shared handle to the child process, for the exit waiter.
+    pub fn child(&self) -> Arc<Mutex<Box<dyn Child + Send + Sync>>> {
+        Arc::clone(&self.child)
+    }
+
     /// Terminate the child process
     pub fn kill(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         if let Ok(mut child) = self.child.lock() {
+            // A reaped child's PID can be reused; Unix kill signals by PID.
+            if let Ok(Some(_)) = child.try_wait() {
+                return Ok(());
+            }
             child.kill()?;
         }
         Ok(())
