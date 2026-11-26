@@ -621,6 +621,48 @@ export default class TerminalPlugin extends Plugin {
     }
   }
 
+  private lastTerminalLeaf: WorkspaceLeaf | null = null;
+  private lastOtherLeaf: WorkspaceLeaf | null = null;
+
+  private isLeafOpen(leaf: WorkspaceLeaf | null): leaf is WorkspaceLeaf {
+    let open = false;
+    this.app.workspace.iterateAllLeaves((candidate) => {
+      if (candidate === leaf) open = true;
+    });
+    return open;
+  }
+
+  /**
+   * Terminal focused: hide it (collapse its sidebar, or go back to the last
+   * other tab). Otherwise: show the last used terminal, or open a new one.
+   */
+  async toggleTerminal(): Promise<void> {
+    const { workspace } = this.app;
+    const activeLeaf = workspace.getActiveViewOfType(TerminalView)?.leaf;
+
+    if (activeLeaf) {
+      const root = activeLeaf.getRoot();
+      const sidebar = [workspace.leftSplit, workspace.rightSplit].find((split) => split === root);
+      if (sidebar) {
+        sidebar.collapse();
+      } else if (this.isLeafOpen(this.lastOtherLeaf)) {
+        workspace.setActiveLeaf(this.lastOtherLeaf, { focus: true });
+      }
+      return;
+    }
+
+    const terminals = workspace.getLeavesOfType(TERMINAL_VIEW_TYPE);
+    const target = this.lastTerminalLeaf && terminals.includes(this.lastTerminalLeaf)
+      ? this.lastTerminalLeaf
+      : terminals[0];
+    if (target) {
+      await workspace.revealLeaf(target);
+      workspace.setActiveLeaf(target, { focus: true });
+      return;
+    }
+    await this.activateTerminalView();
+  }
+
   /**
    * Vault-relative folder for an abstract file: the folder itself, or a file's
    * parent folder.
@@ -1044,6 +1086,32 @@ export default class TerminalPlugin extends Plugin {
         return true;
       },
     });
+
+    // One hotkey to show and hide the terminal. Hiding never closes a session.
+    this.addCommand({
+      id: 'toggle-terminal',
+      name: t('commands.toggleTerminal'),
+      checkCallback: (checking: boolean) => {
+        if (!this.isFeatureVisible('showInCommandPalette')) {
+          return false;
+        }
+        if (!checking) {
+          void this.toggleTerminal();
+        }
+        return true;
+      },
+    });
+
+    this.registerEvent(
+      this.app.workspace.on('active-leaf-change', (leaf) => {
+        if (!leaf) return;
+        if (leaf.view.getViewType() === TERMINAL_VIEW_TYPE) {
+          this.lastTerminalLeaf = leaf;
+        } else {
+          this.lastOtherLeaf = leaf;
+        }
+      })
+    );
 
     // Right-click a file or folder in the explorer -> open a terminal there.
     this.registerEvent(

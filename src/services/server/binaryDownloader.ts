@@ -363,7 +363,7 @@ export class BinaryDownloader {
           if (statusCode >= 300 && statusCode < 400 && redirectLocation) {
             response.resume();
             if (remainingRedirects <= 0) {
-              reject(new Error('下载失败: 重定向次数过多'));
+              reject(new Error('Download failed: too many redirects'));
               return;
             }
             const nextUrl = new URL(redirectLocation, urlObj).toString();
@@ -383,7 +383,7 @@ export class BinaryDownloader {
 
           if (statusCode !== 200) {
             response.resume();
-            reject(new Error(`下载失败: HTTP ${statusCode}`));
+            reject(new Error(`Download failed: HTTP ${statusCode}`));
             return;
           }
 

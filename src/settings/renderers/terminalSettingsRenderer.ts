@@ -592,6 +592,20 @@ export class TerminalSettingsRenderer {
           });
         }));
 
+    // Minimum contrast ratio (readability of dim text)
+    new Setting(container)
+      .setName(t('settingsDetails.terminal.minimumContrastRatio'))
+      .setDesc(t('settingsDetails.terminal.minimumContrastRatioDesc'))
+      .addSlider(slider => slider
+        .setLimits(1, 7, 0.5)
+        .setValue(this.context.plugin.settings.minimumContrastRatio)
+        .setDynamicTooltip()
+        .onChange((value) => {
+          void this.updateAppearanceSetting(() => {
+            this.context.plugin.settings.minimumContrastRatio = value;
+          });
+        }));
+
     // Copy on select
     new Setting(container)
       .setName(t('settingsDetails.terminal.copyOnSelect'))
@@ -602,6 +616,28 @@ export class TerminalSettingsRenderer {
           void this.updateAppearanceSetting(() => {
             this.context.plugin.settings.copyOnSelect = value;
           });
+        }));
+
+    // Close tab on shell exit
+    new Setting(container)
+      .setName(t('settingsDetails.terminal.closeTabOnExit'))
+      .setDesc(t('settingsDetails.terminal.closeTabOnExitDesc'))
+      .addToggle(toggle => toggle
+        .setValue(this.context.plugin.settings.closeTabOnExit)
+        .onChange(async (value) => {
+          this.context.plugin.settings.closeTabOnExit = value;
+          await this.saveSettings();
+        }));
+
+    // Startup command for each new tab
+    new Setting(container)
+      .setName(t('settingsDetails.terminal.startupCommand'))
+      .setDesc(t('settingsDetails.terminal.startupCommandDesc'))
+      .addText(text => text
+        .setValue(this.context.plugin.settings.startupCommand)
+        .onChange(async (value) => {
+          this.context.plugin.settings.startupCommand = value;
+          await this.saveSettings();
         }));
 
     // Wiki-link autocomplete

@@ -6,6 +6,7 @@
 
 import { debugLog, debugWarn, errorLog } from '@/utils/logger';
 import { getHomeDir, getPlatform, isWindows } from '@/utils/platform';
+import { installCanvasFontFix } from '@/utils/canvasFontFix';
 import { t } from '@/i18n';
 import type { ServerManager } from '@/services/server/serverManager';
 import type { PtyClient } from '@/services/server/ptyClient';
@@ -129,7 +130,9 @@ export interface TerminalOptions {
   fontFamily?: string;
   cursorStyle?: 'block' | 'underline' | 'bar';
   cursorBlink?: boolean;
+  minimumContrastRatio?: number;
   copyOnSelect?: boolean;
+  startupCommand?: string;
   wikilink?: {
     isEnabled: () => boolean;
     listEntries: () => AutocompleteEntry[];
@@ -190,6 +193,7 @@ export class TerminalInstance {
   private isInitialized = false;
   private isDestroyed = false;
   private titleChangeCallbacks: Set<(title: string) => void> = new Set();
+  private sessionExitCallbacks: Set<(code: number) => void> = new Set();
   
   // Search-related state
   private searchVisible = false;
@@ -265,6 +269,7 @@ export class TerminalInstance {
       this.xterm = new Terminal({
         cursorBlink: this.options.cursorBlink ?? true,
         cursorStyle: this.options.cursorStyle ?? 'block',
+        minimumContrastRatio: this.options.minimumContrastRatio ?? 1,
         fontSize: this.currentFontSize,
         fontFamily: this.options.fontFamily ?? 'Consolas, "Courier New", monospace',
         theme: this.getTheme(),
@@ -558,9 +563,11 @@ export class TerminalInstance {
       // spawning a fresh shell. On any failure (e.g. SESSION_NOT_FOUND because
       // the orphan reaper already killed it, or a fresh daemon) fall back to a
       // brand-new session.
+      let freshShell = true;
       if (restoreSessionId) {
         try {
           await this.reattachPtySession(serverManager, restoreSessionId);
+          freshShell = false;
         } catch (error) {
           if (this.isDestroyed) return;
           debugWarn('[Terminal] 恢复会话失败，改为新建会话:', error);
@@ -574,6 +581,10 @@ export class TerminalInstance {
 
       this.setupXtermHandlers();
       this.isInitialized = true;
+
+      // A fresh shell runs it; a reattached live session must not. First line only.
+      const startupCommand = this.options.startupCommand?.split(/[\r\n]/)[0]?.trim();
+      if (freshShell && startupCommand) this.runWhenShellReady(startupCommand);
 
       debugLog('[Terminal] 终端已初始化');
     } catch (error) {
@@ -607,13 +618,14 @@ export class TerminalInstance {
     // Handle exit events (session-level)
     this.exitUnsubscribe = this.ptyClient.onSessionExit(this.sessionId, (code: number) => {
       debugLog('[Terminal] PTY 会话退出, code:', code);
-      this.xterm.write(`\r\n\x1b[33m[会话已结束, 退出码: ${code}]\x1b[0m\r\n`);
+      this.xterm.write(`\r\n\x1b[33m[${t('terminalInstance.sessionEnded', { code })}]\x1b[0m\r\n`);
+      this.sessionExitCallbacks.forEach((callback) => callback(code));
     });
     
     // Handle error events (session-level)
     this.errorUnsubscribe = this.ptyClient.onSessionError(this.sessionId, (code: string, message: string) => {
       errorLog('[Terminal] PTY 错误:', code, message);
-      this.xterm.write(`\r\n\x1b[1;31m[错误] ${message}\x1b[0m\r\n`);
+      this.xterm.write(`\r\n\x1b[1;31m[${t('terminalInstance.sessionError')}] ${message}\x1b[0m\r\n`);
     });
 
     // Handle shell integration events
@@ -950,8 +962,8 @@ export class TerminalInstance {
     this.webSocketDisconnected = false;
     this.sessionRecoveryNeeded = true;
     this.clearPendingInput();
-    this.xterm.write('\r\n\x1b[1;31m[服务器已崩溃]\x1b[0m\r\n');
-    this.xterm.write('\x1b[33m正在尝试重启服务器...\x1b[0m\r\n');
+    this.xterm.write(`\r\n\x1b[1;31m[${t('terminalInstance.serverCrashed')}]\x1b[0m\r\n`);
+    this.xterm.write(`\x1b[33m${t('terminalInstance.serverRestarting')}\x1b[0m\r\n`);
   }
 
   handleWebSocketDisconnected(): void {
@@ -961,7 +973,7 @@ export class TerminalInstance {
     this.clearPendingInput();
     if (this.webSocketDisconnected) return;
     this.webSocketDisconnected = true;
-    this.xterm.write('\r\n\x1b[33m[WebSocket 连接已断开，正在重连...]\x1b[0m\r\n');
+    this.xterm.write(`\r\n\x1b[33m[${t('terminalInstance.connectionLostReconnecting')}]\x1b[0m\r\n`);
   }
 
   async handleWebSocketConnected(serverManager: ServerManager): Promise<void> {
@@ -974,7 +986,7 @@ export class TerminalInstance {
     }
 
     this.sessionRecoveryInProgress = true;
-    this.xterm.write('\x1b[32m[连接已恢复，正在恢复终端会话...]\x1b[0m\r\n');
+    this.xterm.write(`\x1b[32m[${t('terminalInstance.connectionRestoring')}]\x1b[0m\r\n`);
 
     try {
       this.clearPendingInput();
@@ -1016,14 +1028,14 @@ export class TerminalInstance {
 
       this.sessionRecoveryNeeded = false;
       this.webSocketDisconnected = false;
-      this.xterm.write('\x1b[32m[终端会话已恢复]\x1b[0m\r\n');
+      this.xterm.write(`\x1b[32m[${t('terminalInstance.sessionRestored')}]\x1b[0m\r\n`);
       this.fit();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       errorLog('[Terminal] 恢复终端会话失败:', error);
       this.sessionRecoveryNeeded = true;
       this.webSocketDisconnected = true;
-      this.xterm.write(`\x1b[1;31m[终端会话恢复失败] ${errorMessage}\x1b[0m\r\n`);
+      this.xterm.write(`\x1b[1;31m[${t('terminalInstance.sessionRestoreFailed')}] ${errorMessage}\x1b[0m\r\n`);
     } finally {
       this.sessionRecoveryInProgress = false;
     }
@@ -1082,6 +1094,7 @@ export class TerminalInstance {
     }
 
     const containerWindow = container.ownerDocument.defaultView ?? window;
+    installCanvasFontFix(containerWindow);
     if (
       this.containerEl === container
       && this.xterm.element?.parentElement === container
@@ -1119,7 +1132,7 @@ export class TerminalInstance {
         })
         .catch((error) => {
           const errorMsg = error instanceof Error ? error.message : String(error);
-          this.xterm.write(`\r\n\x1b[1;31m[渲染器错误] ${errorMsg}\x1b[0m\r\n`);
+          this.xterm.write(`\r\n\x1b[1;31m[${t('terminalInstance.rendererError')}] ${errorMsg}\x1b[0m\r\n`);
         });
     });
   }
@@ -2196,6 +2209,38 @@ export class TerminalInstance {
     };
   }
 
+  /** Listen for the shell process exit (the PTY session ended). */
+  onSessionExit(callback: (code: number) => void): () => void {
+    this.sessionExitCallbacks.add(callback);
+    return () => {
+      this.sessionExitCallbacks.delete(callback);
+    };
+  }
+
+  /**
+   * Type a command once the new shell has had no output for 300 ms (its
+   * prompt is up). Called after setupXtermHandlers: a command written before
+   * that lost its Enter on Windows ConPTY (cmd, 2026-11-26).
+   */
+  private runWhenShellReady(command: string): void {
+    const client = this.ptyClient;
+    const sessionId = this.sessionId;
+    if (!client || !sessionId) return;
+
+    let timer = 0;
+    const arm = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        unsubscribe();
+        if (!this.isDestroyed && this.sessionId === sessionId) {
+          this.write(`${command}\r`);
+        }
+      }, 300);
+    };
+    const unsubscribe = client.onSessionOutput(sessionId, arm);
+    arm();
+  }
+
   /**
    * Listen for renderer changes (canvas <-> webgl).
    * The callback fires after the renderer addon has actually been swapped in,
@@ -2394,6 +2439,9 @@ export class TerminalInstance {
     }
     if (options.cursorBlink !== undefined) {
       this.xterm.options.cursorBlink = options.cursorBlink;
+    }
+    if (options.minimumContrastRatio !== undefined) {
+      this.xterm.options.minimumContrastRatio = options.minimumContrastRatio;
     }
     this.updateTheme();
     const nextRenderer = this.options.preferredRenderer || 'canvas';

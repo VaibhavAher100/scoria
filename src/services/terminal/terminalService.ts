@@ -238,7 +238,9 @@ export class TerminalService {
         fontFamily: this.settings.fontFamily,
         cursorStyle: this.settings.cursorStyle,
         cursorBlink: this.settings.cursorBlink,
+        minimumContrastRatio: this.settings.minimumContrastRatio,
         copyOnSelect: this.settings.copyOnSelect,
+        startupCommand: this.settings.startupCommand,
         wikilink: {
           isEnabled: () => this.settings.wikilinkAutocomplete,
           listEntries: () => this.listWikilinkEntries(),

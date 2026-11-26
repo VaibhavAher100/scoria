@@ -81,7 +81,10 @@ export interface TerminalSettings {
   fontFamily: string;
   cursorStyle: 'block' | 'underline' | 'bar';
   cursorBlink: boolean;
+  minimumContrastRatio: number;  // xterm.js minimumContrastRatio, 1 = off
   copyOnSelect: boolean;       // Auto-copy selected text to the clipboard on selection
+  closeTabOnExit: boolean;     // Close the tab when its shell exits with code 0
+  startupCommand: string;      // Typed into each new tab's shell (not on reattach)
   wikilinkAutocomplete: boolean;  // Show a [[ note picker in the terminal (opt-in)
   wikilinkInsertMode: 'wikilink' | 'vault-path' | 'absolute-path';  // What [[ inserts
 
@@ -365,7 +368,10 @@ export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   fontFamily: 'Consolas, "Courier New", monospace',
   cursorStyle: 'block',
   cursorBlink: true,
+  minimumContrastRatio: 1,
   copyOnSelect: true,
+  closeTabOnExit: false,
+  startupCommand: '',
   wikilinkAutocomplete: false,
   wikilinkInsertMode: 'wikilink',
   useObsidianTheme: true,
