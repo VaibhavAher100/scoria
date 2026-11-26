@@ -45,6 +45,7 @@ export interface TranslationKeys {
     notInitialized: string;
     renameTerminal: string;
     dropHintPasteFilePath: string;
+    dropNoUsableContent: string;
     search: {
       placeholder: string;
       previous: string;
@@ -82,6 +83,7 @@ export interface TranslationKeys {
   commands: {
     openTerminal: string;
     openTerminalCurrentFolder: string;
+    toggleTerminal: string;
     openTerminalHere: string;
     showChangelog: string;
     terminalSearch: string;
@@ -273,6 +275,12 @@ export interface TranslationKeys {
       cursorBlinkDesc: string;
       copyOnSelect: string;
       copyOnSelectDesc: string;
+      closeTabOnExit: string;
+      closeTabOnExitDesc: string;
+      minimumContrastRatio: string;
+      minimumContrastRatioDesc: string;
+      startupCommand: string;
+      startupCommandDesc: string;
       wikilinkAutocomplete: string;
       wikilinkAutocompleteDesc: string;
       wikilinkInsertMode: string;
@@ -414,6 +422,15 @@ export interface TranslationKeys {
     cannotConnect: string;
     xtermLoadFailed: string;
     xtermInitFailed: string;
+    sessionEnded: string;
+    sessionError: string;
+    serverCrashed: string;
+    serverRestarting: string;
+    connectionLostReconnecting: string;
+    connectionRestoring: string;
+    sessionRestored: string;
+    sessionRestoreFailed: string;
+    rendererError: string;
   };
 
   // Terminal service

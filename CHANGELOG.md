@@ -9,7 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- "Toggle terminal" command: one hotkey shows the last terminal or hides the focused one. Hiding never stops a session. Set the hotkey in Obsidian's hotkey settings.
+- "Startup command" setting: the command runs in each new terminal tab after the shell shows its prompt. It does not run again when a tab attaches to a shell that is still running.
+- "Minimum contrast ratio" setting: dim or grey text gets more contrast against the background. The default (1) changes nothing.
+- "Close tab on shell exit" setting: the tab closes when its shell exits with code 0. After an error it stays open, so you can read the message.
+
 ### Fixed
+- Windows: the plugin never learned that a shell had exited, so no "Session ended" line appeared, and the exit code was always 0. The daemon now watches the shell process and reports its real exit code.
+- Status messages in the terminal (session ended, server crashed, reconnect, restore, renderer error), the drop notice and two download errors were in Chinese for every user. They now use the Obsidian language.
+- Obsidian builds with Chromium 150 can draw terminal text very small in wide cells (reported for Termy, Electron 43.8.9). Scoria now removes the leading space that xterm.js puts in its canvas font string.
 - Linux and macOS: the plugin folder path lost its leading `/`, so the server binary, the daemon file and the agent context files went to a folder under the directory Obsidian started in. They now go to the vault's plugin folder. The plugin downloads the binary again there and checks it against the pinned SHA-256. Files at the old place are not used; you can delete them.
 - Linux and macOS: the Claude Code IDE bridge now gives the real vault path, so Claude Code started in the vault can find the bridge.
 

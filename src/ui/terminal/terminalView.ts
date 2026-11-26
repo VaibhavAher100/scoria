@@ -74,6 +74,7 @@ export class TerminalView extends ItemView {
   private wikilinkLinkProvider: { dispose(): void } | null = null;
   private titleChangeCleanup: (() => void) | null = null;
   private searchStateCleanup: (() => void) | null = null;
+  private sessionExitCleanup: (() => void) | null = null;
   private initPromise: Promise<TerminalInstance> | null = null;
   private initResolve: ((terminal: TerminalInstance) => void) | null = null;
   private initReject: ((error: Error) => void) | null = null;
@@ -430,6 +431,12 @@ export class TerminalView extends ItemView {
       this.updateDropHintText();
     });
 
+    this.sessionExitCleanup = terminal.onSessionExit((code) => {
+      if (code === 0 && this.getTerminalPlugin()?.settings.closeTabOnExit) {
+        this.leaf.detach();
+      }
+    });
+
     this.searchStateCleanup = terminal.onSearchStateChange((visible) => {
       if (visible) {
         this.showSearch();
@@ -473,6 +480,8 @@ export class TerminalView extends ItemView {
     this.titleChangeCleanup = null;
     this.searchStateCleanup?.();
     this.searchStateCleanup = null;
+    this.sessionExitCleanup?.();
+    this.sessionExitCleanup = null;
   }
 
   /**
@@ -611,7 +620,7 @@ export class TerminalView extends ItemView {
     if (!input) {
       debugLog('[Terminal DnD] No usable file path or text in drop payload');
       errorLog('[Terminal DnD] No usable path details:', this.describeDropPayload(dataTransfer));
-      new Notice('Scoria: 未获取到可用文本或路径，请确认拖拽来源是否支持文本或文件。');
+      new Notice(`Scoria: ${t('terminal.dropNoUsableContent')}`);
       return;
     }
 
@@ -1306,6 +1315,7 @@ export class TerminalView extends ItemView {
       fontFamily: settings.fontFamily,
       cursorStyle: settings.cursorStyle,
       cursorBlink: settings.cursorBlink,
+      minimumContrastRatio: settings.minimumContrastRatio,
       copyOnSelect: settings.copyOnSelect,
       useObsidianTheme: settings.useObsidianTheme,
       backgroundColor: settings.backgroundColor,
