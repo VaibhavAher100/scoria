@@ -548,6 +548,7 @@ export class TerminalInstance {
   async initializeWithServerManager(
     serverManager: ServerManager,
     restoreSessionId?: string,
+    restoreWin32InputMode = false,
   ): Promise<void> {
     if (this.isInitialized || this.isDestroyed) return;
 
@@ -566,6 +567,9 @@ export class TerminalInstance {
       let freshShell = true;
       if (restoreSessionId) {
         try {
+          // ConPTY sent ESC[?9001h at session start, before the detach, so the
+          // replay does not carry it; a later mode change in the replay still wins.
+          this.win32InputModeEnabled = restoreWin32InputMode;
           await this.reattachPtySession(serverManager, restoreSessionId);
           freshShell = false;
         } catch (error) {
@@ -2257,6 +2261,8 @@ export class TerminalInstance {
   /** The daemon session id, or null before init / after destroy. Used by the
    *  view to persist + restore the session across an Obsidian reload (Part B). */
   getSessionId(): string | null { return this.sessionId; }
+  /** Persisted next to the session id, so a reattach after a reload keeps the mode. */
+  isWin32InputModeEnabled(): boolean { return this.win32InputModeEnabled; }
   getFitAddon(): FitAddon { return this.fitAddon; }
   getSearchAddon(): SearchAddon { return this.searchAddon; }
 

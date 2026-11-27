@@ -80,6 +80,8 @@ export class TerminalView extends ItemView {
   private initReject: ((error: Error) => void) | null = null;
   /** Session id restored from view state, used to reattach across a reload (Part B). */
   private restoredSessionId: string | null = null;
+  /** Windows win32 input mode of the restored session; the replay does not repeat it. */
+  private restoredWin32InputMode = false;
   // One-shot working directory requested at open time (e.g. "open terminal in
   // this folder"). Consumed by the first fresh spawn; not persisted to state.
   private requestedCwd: string | null = null;
@@ -110,6 +112,10 @@ export class TerminalView extends ItemView {
     const sessionId = this.terminalInstance?.getSessionId() ?? this.restoredSessionId;
     if (sessionId) {
       state.sessionId = sessionId;
+      const win32InputMode = this.terminalInstance
+        ? this.terminalInstance.isWin32InputModeEnabled()
+        : this.restoredWin32InputMode;
+      if (win32InputMode) state.win32InputMode = true;
     }
     return state;
   }
@@ -124,6 +130,7 @@ export class TerminalView extends ItemView {
       const sessionId = (state as { sessionId?: unknown }).sessionId;
       if (typeof sessionId === 'string' && sessionId) {
         this.restoredSessionId = sessionId;
+        this.restoredWin32InputMode = (state as { win32InputMode?: unknown }).win32InputMode === true;
       }
     }
     if (state && typeof state === 'object' && 'cwd' in state) {
@@ -384,10 +391,16 @@ export class TerminalView extends ItemView {
       // and the leaf reopens) spawns fresh rather than chasing a stale id.
       const restoreSessionId = this.restoredSessionId ?? undefined;
       this.restoredSessionId = null;
+      const restoreWin32InputMode = this.restoredWin32InputMode;
+      this.restoredWin32InputMode = false;
       // A requested cwd only applies to a fresh spawn, never a reattach.
       const cwdOverride = restoreSessionId ? undefined : (this.requestedCwd ?? undefined);
       this.requestedCwd = null;
-      this.terminalInstance = await this.terminalService.createTerminal(restoreSessionId, cwdOverride);
+      this.terminalInstance = await this.terminalService.createTerminal(
+        restoreSessionId,
+        cwdOverride,
+        restoreSessionId ? restoreWin32InputMode : undefined,
+      );
       this.initResolve?.(this.terminalInstance);
       this.initResolve = null;
       this.initReject = null;
