@@ -190,7 +190,11 @@ export class TerminalService {
    * @returns The created terminal instance
    * @throws Error if terminal creation fails
    */
-  async createTerminal(restoreSessionId?: string, cwdOverride?: string): Promise<TerminalInstance> {
+  async createTerminal(
+    restoreSessionId?: string,
+    cwdOverride?: string,
+    restoreWin32InputMode?: boolean,
+  ): Promise<TerminalInstance> {
     try {
       // Ensure the server is running
       await this.serverManager.ensureServer();
@@ -262,7 +266,7 @@ export class TerminalService {
       
       // Initialize the terminal through ServerManager (reattaching to a restored
       // session id when one survived a reload).
-      await terminal.initializeWithServerManager(this.serverManager, restoreSessionId);
+      await terminal.initializeWithServerManager(this.serverManager, restoreSessionId, restoreWin32InputMode);
 
       this.terminals.set(terminal.id, terminal);
       
